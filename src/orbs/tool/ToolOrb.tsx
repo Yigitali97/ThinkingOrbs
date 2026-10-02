@@ -62,9 +62,10 @@ export function ToolOrb({ tools, size = 200, showLabels = true, className, style
             <li key={tool.id} className="to-chip" data-status={tool.status}>
               <span className="to-dot" style={{ background: tool.status === 'error' ? '#f05252' : tool.color }} />
               <span className="to-name">{tool.label ?? tool.id}</span>
-              <span className="to-state" aria-label={tool.status}>
+              <span className="to-state" aria-hidden="true">
                 {tool.status === 'running' ? <span className="to-spin" /> : tool.status === 'done' ? '✓' : '✕'}
               </span>
+              <span className="to-sr">{tool.status === 'running' ? ', running' : tool.status === 'done' ? ', done' : ', failed'}</span>
             </li>
           ))}
         </ul>
