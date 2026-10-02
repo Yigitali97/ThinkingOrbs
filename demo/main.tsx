@@ -31,9 +31,13 @@ import {
   VoiceOrb,
 } from '../src/orbs';
 import { reelFrames, Scene, SCENE_FOCUS, sceneImage } from './samples';
+import { Playground } from './playground/Playground';
+import { VoiceAssistant } from './voice-assistant/VoiceAssistant';
 import './demo.css';
 
 const SECTIONS = [
+  { id: 'playground', name: 'Playground' },
+  { id: 'voice-assistant', name: 'Voice assistant' },
   { id: 'status', name: 'StatusOrb' },
   { id: 'gaze', name: 'GazeOrb' },
   { id: 'mascot', name: 'MascotOrb' },
@@ -49,7 +53,7 @@ const SECTIONS = [
   { id: 'ask', name: 'AskOrb' },
 ];
 
-function Section({ id, name, blurb, code, children }: { id: string; name: string; blurb: string; code: string; children: ReactNode }) {
+function Section({ id, name, blurb, code, children }: { id: string; name: string; blurb: string; code?: string; children: ReactNode }) {
   return (
     <section id={id} className="section">
       <header className="section-head">
@@ -57,9 +61,11 @@ function Section({ id, name, blurb, code, children }: { id: string; name: string
         <p>{blurb}</p>
       </header>
       {children}
-      <pre className="code">
-        <code>{code}</code>
-      </pre>
+      {code && (
+        <pre className="code">
+          <code>{code}</code>
+        </pre>
+      )}
     </section>
   );
 }
@@ -667,6 +673,23 @@ function App() {
           ))}
         </nav>
       </header>
+
+      <Section
+        id="playground"
+        name="Playground"
+        blurb="Pick an orb, change any option and see it live. The code underneath updates as you go — copy it straight into your app."
+      >
+        <Playground />
+      </Section>
+
+      <Section
+        id="voice-assistant"
+        name="Voice assistant sample"
+        blurb="A working voice assistant built on AssistantOrb and the browser's own speech recognition and speech synthesis — no backend. Talk to it, interrupt it, mute it."
+        code={`// demo/voice-assistant/ — copy the folder, then plug in your model:\n<VoiceAssistant respond={(text, signal) => callYourModel(text, { signal })} />`}
+      >
+        <VoiceAssistant />
+      </Section>
 
       <Section
         id="status"
