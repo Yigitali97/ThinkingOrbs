@@ -468,6 +468,36 @@ Two parts of the demo are useful on their own:
 
   Speech recognition works in Chrome, Edge and Safari; in other browsers the sample still answers typed messages aloud.
 
+- **Chat app sample** (`demo/chat-app/`) — a chat where each orb has one clear job, and only appears while it's doing it:
+
+  | Use case | Orb in the reply |
+  |---|---|
+  | Search the web | SearchOrb, then a numbered source list |
+  | Plan a trip budget | ToolOrb, then ✓/✕ tool chips |
+  | Think it through | ReasoningOrb with a budget arc, then "Thought for Ns" |
+  | Read a file | IngestOrb (upload in the composer, then reading) |
+  | Look at an image | VisionOrb with the brightest spot marked |
+  | Watch a video | ReelOrb, then a strip of the frames |
+  | Dictate | VoiceOrb in the composer while you speak |
+  | Every reply | TokenOrb next to the streamed text |
+  | Header | MascotOrb avatar and a StatusOrb showing the current activity |
+
+  Hints under the message box (and cards in an empty chat) start each use case; the file, image and video ones come with built-in samples. The demo agent does real maths, budgets, file statistics and image/video colour analysis, and says plainly that its web search is simulated. Connect your model by emitting events:
+
+  ```tsx
+  <ChatApp
+    agent={async ({ text, attachments }, emit, signal) => {
+      emit({ type: 'thinking', label: 'Planning', budget: 0.2 });                   // ReasoningOrb
+      emit({ type: 'search', phase: 'searching', sources: [] });                     // SearchOrb
+      emit({ type: 'tool', id: 'calc', label: 'calculator', status: 'running' });   // ToolOrb
+      emit({ type: 'ingest', name: 'report.pdf', progress: 1, status: 'reading' }); // IngestOrb
+      emit({ type: 'vision', status: 'scanning', src: imageUrl });                  // VisionOrb
+      emit({ type: 'reel', frames, progress: 0.5, status: 'analyzing' });           // ReelOrb
+      emit({ type: 'text', delta: 'Here is what I found…' });                       // TokenOrb
+    }}
+  />
+  ```
+
 ```bash
 npm install
 ```
@@ -510,6 +540,7 @@ src/orbs/
 demo/               the demo page (main.tsx, demo.css, samples.ts)
   playground/       the Playground
   voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
+  chat-app/         the chat app sample (agent protocol + demo agent, UI)
 ```
 
 Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
