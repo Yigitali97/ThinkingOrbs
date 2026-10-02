@@ -10,6 +10,9 @@ import {
   AssistantState,
   MascotOrb,
   MascotOrbRef,
+  SearchOrb,
+  SearchPhase,
+  SearchSource,
   STATUS_VARIANTS,
   StatusOrb,
   TokenOrb,
@@ -28,6 +31,7 @@ const SECTIONS = [
   { id: 'assistant', name: 'AssistantOrb' },
   { id: 'token', name: 'TokenOrb' },
   { id: 'tool', name: 'ToolOrb' },
+  { id: 'search', name: 'SearchOrb' },
   { id: 'ask', name: 'AskOrb' },
 ];
 
@@ -293,6 +297,61 @@ function ToolDemo() {
   );
 }
 
+// ------------------------------------------------------------------ SearchOrb
+
+const FOUND: SearchSource[] = [
+  { id: '1', domain: 'wikipedia.org', score: 0.9 },
+  { id: '2', domain: 'reuters.com', score: 0.7 },
+  { id: '3', domain: 'arxiv.org', score: 0.95 },
+  { id: '4', domain: 'github.com', score: 0.5 },
+  { id: '5', domain: 'nature.com', score: 0.85 },
+  { id: '6', domain: 'bbc.co.uk', score: 0.4 },
+  { id: '7', domain: 'stackoverflow.com', score: 0.6 },
+  { id: '8', domain: 'mit.edu', score: 0.75 },
+  { id: '9', domain: 'who.int', score: 0.3 },
+  { id: '10', domain: 'nytimes.com', score: 0.55 },
+];
+
+function SearchDemo() {
+  const [phase, setPhase] = useState<SearchPhase>('idle');
+  const [sources, setSources] = useState<SearchSource[]>([]);
+  const [run, setRun] = useState<{ n: number; empty: boolean }>({ n: 0, empty: false });
+
+  useEffect(() => {
+    setSources([]);
+    setPhase('searching');
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+    if (run.empty) {
+      at(2400, () => setPhase('empty'));
+    } else {
+      let ms = 500;
+      FOUND.forEach((src) => {
+        ms += 220 + Math.random() * 260;
+        at(ms, () => setSources((list) => [...list, src]));
+      });
+      at(ms + 900, () => setPhase('ranking'));
+      at(ms + 2500, () => setPhase('synthesizing'));
+      at(ms + 5000, () => setPhase('done'));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [run]);
+
+  return (
+    <div className="panel panel-center">
+      <SearchOrb phase={phase} sources={sources} size={300} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, empty: false }))}>
+          Search again
+        </button>
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, empty: true }))}>
+          Search with no results
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------- AskOrb
 
 const failingAgent: AskHandler = async (_q, report, signal) => {
@@ -330,7 +389,7 @@ function App() {
       <header className="hero">
         <StatusOrb variant="reasoning · twins" size={44} label={null} />
         <h1>Orbs</h1>
-        <p>Animated presence for AI interfaces — eight React components, no dependencies beyond React.</p>
+        <p>Animated presence for AI interfaces — nine React components, no dependencies beyond React.</p>
         <nav className="nav">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`}>
@@ -404,6 +463,15 @@ function App() {
       </Section>
 
       <Section
+        id="search"
+        name="SearchOrb"
+        blurb="For AI search. Each source flies in and joins the orbit; ranking pulls the best ones closer; synthesis absorbs them into the core, best first."
+        code={`<SearchOrb phase="searching" sources={[{ id: '1', domain: 'arxiv.org', score: 0.9 }]} />\n// idle · searching · ranking · synthesizing · done · empty`}
+      >
+        <SearchDemo />
+      </Section>
+
+      <Section
         id="ask"
         name="AskOrb"
         blurb="The whole flow: prompt bar → thinking orb with live stages → answer card. Drive the stages from your agent."
@@ -413,7 +481,7 @@ function App() {
       </Section>
 
       <footer className="footer">
-        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, TokenOrb, ToolOrb, AskOrb } from './orbs';`}</code>
+        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, TokenOrb, ToolOrb, SearchOrb, AskOrb } from './orbs';`}</code>
       </footer>
     </div>
   );

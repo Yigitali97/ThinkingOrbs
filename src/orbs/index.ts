@@ -7,3 +7,4 @@ export * from './ask';
 export * from './assistant';
 export * from './token';
 export * from './tool';
+export * from './search';
