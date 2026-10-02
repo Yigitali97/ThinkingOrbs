@@ -3,12 +3,10 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AskOrb,
-  AgentStage,
   ASSISTANT_COLORS,
   AssistantOrb,
   AssistantState,
   captureFrames,
-  createStageOrb,
   GazeOrb,
   GazeOrbRef,
   IngestOrb,
@@ -624,77 +622,4 @@ export const DEMOS: Record<string, () => ReactNode> = {
   'reasoning-orb': ReasoningDemo,
   'vision-orb': VisionDemo,
   'reel-orb': ReelDemo,
-};
-
-// ------------------------------------------------------------------- gallery thumbs
-
-function TokenThumb({ size }: { size: number }) {
-  const [tokens, setTokens] = useState(0);
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      setTokens((n) => n + 1 + Math.floor(Math.random() * 3));
-      timer = setTimeout(tick, Math.random() < 0.15 ? 600 : 50 + Math.random() * 80);
-    };
-    tick();
-    return () => clearTimeout(timer);
-  }, []);
-  return <TokenOrb tokens={tokens} size={size} label={null} />;
-}
-
-/** AskOrb's stage orb on its own, stepping through the stages. */
-function StageThumb({ size }: { size: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const orb = createStageOrb(canvas, size);
-    const stages: AgentStage[] = ['thinking', 'searching', 'analyzing', 'composing'];
-    let i = 0;
-    const id = setInterval(() => orb.setStage(stages[++i % stages.length]), 1800);
-    return () => {
-      clearInterval(id);
-      orb.destroy();
-    };
-  }, [size]);
-  return <canvas ref={ref} aria-hidden="true" style={{ display: 'block', width: size, height: size }} />;
-}
-
-const THUMB_TOOLS: ToolCall[] = [
-  { id: 'search', label: 'web_search', status: 'done' },
-  { id: 'files', label: 'read_file', status: 'running' },
-  { id: 'code', label: 'run_code', status: 'running' },
-];
-const THUMB_STEPS: ReasoningStep[] = THOUGHTS.slice(0, 6).map((label, i) => ({ id: String(i), label }));
-
-function VisionThumb({ size }: { size: number }) {
-  const src = useMemo(() => sceneImage('sunset'), []);
-  return <VisionOrb src={src} status="done" focus={SCENE_FOCUS.sunset} size={size} showCaption={false} />;
-}
-
-function ReelThumb({ width }: { width: number }) {
-  const frames = useMemo(() => reelFrames(10), []);
-  const [progress, setProgress] = useState(0.1);
-  useEffect(() => {
-    const id = setInterval(() => setProgress((p) => (p >= 1 ? 0 : p + 0.01)), 80);
-    return () => clearInterval(id);
-  }, []);
-  return <ReelOrb frames={frames} progress={progress} status="analyzing" width={width} height={Math.round(width * 0.6)} showCaption={false} />;
-}
-
-/** Small decorative previews used in lists; hidden from assistive tech by the caller. */
-export const THUMBS: Record<string, (props: { size: number }) => ReactNode> = {
-  'assistant-orb': ({ size }) => <AssistantOrb state="listening" size={size} getLevel={fakeVoice} label={null} />,
-  'voice-orb': ({ size }) => <VoiceOrb size={size} getLevel={fakeVoice} label={null} />,
-  'status-orb': ({ size }) => <StatusOrb variant="reasoning · twins" size={Math.round(size * 0.6)} label={null} />,
-  'token-orb': ({ size }) => <TokenThumb size={Math.round(size * 0.45)} />,
-  'tool-orb': ({ size }) => <ToolOrb tools={THUMB_TOOLS} size={size} showLabels={false} />,
-  'ask-orb': ({ size }) => <StageThumb size={Math.round(size * 0.8)} />,
-  'mascot-orb': ({ size }) => <MascotOrb size={size} label={null} />,
-  'gaze-orb': ({ size }) => <GazeOrb size={Math.round(size * 0.8)} label={null} />,
-  'search-orb': ({ size }) => <SearchOrb phase="ranking" sources={FOUND.slice(0, 7)} size={size} showCaption={false} />,
-  'ingest-orb': ({ size }) => <IngestOrb name="report.pdf" progress={0.55} status="uploading" width={Math.round(size * 1.5)} height={size} showCaption={false} />,
-  'reasoning-orb': ({ size }) => <ReasoningOrb steps={THUMB_STEPS} budget={0.45} size={size} showCaption={false} />,
-  'vision-orb': ({ size }) => <VisionThumb size={size} />,
-  'reel-orb': ({ size }) => <ReelThumb width={Math.round(size * 1.5)} />,
 };

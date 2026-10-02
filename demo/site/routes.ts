@@ -79,14 +79,16 @@ export interface PageMeta {
   description: string;
 }
 
+/** Paths that show the first component's page: the site opens on it. */
+export const isHome = (path: string) => path === '/' || path === '/components';
+
 const strip = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : path);
 
 /** Title and description for a path, or null when no page exists there. */
 export function pageMeta(rawPath: string): PageMeta | null {
   const path = strip(rawPath);
-  if (path === '/') return { title: `${SITE_NAME}: animated orbs for AI interfaces`, description: SITE_DESCRIPTION };
-  if (path === '/components')
-    return { title: `Components · ${SITE_NAME}`, description: 'All thirteen orbs, grouped by the situation they are for, with live demos and props.' };
+  // the site opens on the first component's page
+  if (path === '/' || path === '/components') return { title: `${SITE_NAME}: animated orbs for AI interfaces`, description: SITE_DESCRIPTION };
   if (path === '/examples')
     return { title: `Examples · ${SITE_NAME}`, description: 'Complete samples built from the orbs: a chat app, a voice assistant, an agent run and an ask-and-answer flow.' };
   if (path === '/playground')
@@ -96,20 +98,8 @@ export function pageMeta(rawPath: string): PageMeta | null {
     const meta = COMPONENTS.find((m) => m.slug === c[1]);
     return meta ? { title: `${meta.name} · ${SITE_NAME}`, description: meta.summary } : null;
   }
-  const e = path.match(/^\/examples\/([a-z-]+)$/);
-  if (e) {
-    const meta = EXAMPLES.find((m) => m.slug === e[1]);
-    return meta ? { title: `${meta.name} example · ${SITE_NAME}`, description: meta.summary } : null;
-  }
   return null;
 }
 
 /** Every page path, for prerendering and tests. */
-export const ALL_PATHS: string[] = [
-  '/',
-  '/components',
-  ...COMPONENTS.map((c) => `/components/${c.slug}`),
-  '/examples',
-  ...EXAMPLES.map((e) => `/examples/${e.slug}`),
-  '/playground',
-];
+export const ALL_PATHS: string[] = ['/', '/components', ...COMPONENTS.map((c) => `/components/${c.slug}`), '/examples', '/playground'];

@@ -1,28 +1,24 @@
 import { CSSProperties, lazy, ReactNode, Suspense, useEffect, useRef } from 'react';
 import { StatusOrb } from '../../src/orbs';
-import { ComponentPage, ComponentsIndex } from './pages/Components';
-import { ExamplesIndex } from './pages/Examples';
-import { Home } from './pages/Home';
+import { ComponentPage } from './pages/Components';
 import { NotFound } from './pages/NotFound';
 import { Link, Location, useLocation, useScrollManagement } from './router';
-import { COMPONENTS, EXAMPLES, pageMeta, SITE_NAME } from './routes';
+import { COMPONENTS, isHome, pageMeta, SITE_NAME } from './routes';
 import { ErrorBoundary } from './ErrorBoundary';
 
-const ExamplePage = lazy(() => import('./pages/ExamplePage').then((m) => ({ default: m.ExamplePage })));
+const ExamplesPage = lazy(() => import('./pages/Examples').then((m) => ({ default: m.ExamplesPage })));
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then((m) => ({ default: m.PlaygroundPage })));
 
 export const REPO_URL = 'https://github.com/Yigitali97/ThinkingOrbs';
+const inComponents = (path: string) => isHome(path) || path.startsWith('/components/');
 
 function route(loc: Location): { page: ReactNode; tint?: string } {
   const { path } = loc;
-  if (path === '/') return { page: <Home /> };
-  if (path === '/components') return { page: <ComponentsIndex /> };
-  if (path === '/examples') return { page: <ExamplesIndex /> };
+  if (path === '/examples') return { page: <ExamplesPage /> };
   if (path === '/playground') return { page: <PlaygroundPage />, tint: '#a78bfa' };
-  const c = COMPONENTS.find((m) => path === `/components/${m.slug}`);
+  // the site opens on the first component's page
+  const c = isHome(path) ? COMPONENTS[0] : COMPONENTS.find((m) => path === `/components/${m.slug}`);
   if (c) return { page: <ComponentPage key={c.slug} meta={c} />, tint: c.tint };
-  const e = EXAMPLES.find((m) => path === `/examples/${m.slug}`);
-  if (e) return { page: <ExamplePage key={e.slug} meta={e} />, tint: e.tint };
   return { page: <NotFound /> };
 }
 
@@ -53,7 +49,7 @@ function Header() {
           <span>{SITE_NAME}</span>
         </Link>
         <nav className="topnav" aria-label="Main">
-          <Link to="/components" section>
+          <Link to="/" section match={inComponents}>
             Components
           </Link>
           <Link to="/examples" section>
@@ -78,7 +74,7 @@ function Footer() {
         {SITE_NAME}: thirteen React components with no dependencies beyond React. The orbs live in <code>src/orbs/</code>; copy the folder into your app.
       </p>
       <nav aria-label="Footer">
-        <Link to="/components">Components</Link>
+        <Link to="/">Components</Link>
         <Link to="/examples">Examples</Link>
         <Link to="/playground">Playground</Link>
         <a href={REPO_URL} target="_blank" rel="noreferrer">

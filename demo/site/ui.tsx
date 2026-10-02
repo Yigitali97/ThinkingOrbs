@@ -1,6 +1,6 @@
 // Small building blocks shared by the site's pages.
 
-import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { highlight } from './highlight';
 
 export async function copyText(text: string) {
@@ -70,28 +70,6 @@ export function CodeBlock({ code, title, copy = true }: { code: string; title?: 
         </code>
       </pre>
     </figure>
-  );
-}
-
-/**
- * Mounts its children only while they are on (or near) the screen, so a page
- * of live orbs runs only the animation loops you can see. Keeps the box size.
- */
-export function InView({ children, width, height, style, className }: { children: ReactNode; width: number | string; height: number; style?: CSSProperties; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === 'undefined') return setVisible(true);
-    const io = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: '120px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div ref={ref} className={className} style={{ width, height, display: 'grid', placeItems: 'center', ...style }} data-inview={visible ? 'on' : 'off'}>
-      {visible ? children : null}
-    </div>
   );
 }
 

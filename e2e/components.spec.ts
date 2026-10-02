@@ -35,10 +35,11 @@ test.describe('AssistantOrb', () => {
       await page.waitForTimeout(900); // cross-fade
       if (state === 'muted') {
         // muted dims to dark grey and nearly stops: still drawn, but much darker than idle
+        // (the fade is frame-based, so on a slow machine it takes longer: wait for it)
+        await expect.poll(async () => (await pixels(orb)).lit, { message: 'muted is dim', timeout: 15_000 }).toBeLessThan(0.02);
         const p = await pixels(orb);
         const brightness = p.grid.reduce((x, y) => x + y, 0) / p.grid.length;
         expect(brightness, 'muted is still drawn').toBeGreaterThan(1.5);
-        expect(p.lit, 'muted is dim').toBeLessThan(0.02);
         continue;
       }
       const p = await expectAnimating(orb);

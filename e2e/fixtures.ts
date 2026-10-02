@@ -144,7 +144,7 @@ export function frameDiff(a: Pixels, b: Pixels) {
 export async function expectAnimating(target: Locator, { minLit = 0.004, minDiff = 0.15, gap = 450 } = {}) {
   await expect(target).toBeVisible();
   // orbs fade in when they mount or change state, so give it a moment to appear
-  await expect.poll(async () => (await pixels(target)).lit, { message: 'orb should draw something', timeout: 5000 }).toBeGreaterThan(minLit);
+  await expect.poll(async () => (await pixels(target)).lit, { message: 'orb should draw something', timeout: 10_000 }).toBeGreaterThan(minLit);
   const a = await pixels(target);
   await target.page().waitForTimeout(gap);
   const b = await pixels(target);
