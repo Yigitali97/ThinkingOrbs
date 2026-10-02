@@ -3,10 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Orbs</title>
+    <meta name="theme-color" content="#0a0b0e" />
+    <meta name="color-scheme" content="dark" />
+    <title>ThinkingOrbs: animated orbs for AI interfaces</title>
+    <meta name="description" content="Animated orb components for AI interfaces: thirteen React components that show what an assistant is doing, driven by real audio, tokens, tool calls, sources and progress." />
+    <meta property="og:title" content="ThinkingOrbs: animated orbs for AI interfaces" />
+    <meta property="og:description" content="Animated orb components for AI interfaces: thirteen React components that show what an assistant is doing, driven by real audio, tokens, tool calls, sources and progress." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      /* paint the right background before the CSS bundle arrives */
+      html, body { background: #0a0b0e; color: #ececf0; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p style="font: 16px/1.6 system-ui, sans-serif; padding: 48px 24px; max-width: 560px; margin: 0 auto">
+        ThinkingOrbs is a set of animated React components, and this site shows them live, so it needs JavaScript. The source and docs are on
+        <a href="https://github.com/Yigitali97/ThinkingOrbs" style="color: #c4b5fd">GitHub</a>.
+      </p>
+    </noscript>
     <script type="module" src="/demo/main.tsx"></script>
   </body>
 </html>

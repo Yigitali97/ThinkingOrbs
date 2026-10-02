@@ -63,7 +63,7 @@ export function VoiceAssistant({ respond = localBrain }: { respond?: (text: stri
         />
       </button>
 
-      <div className="va-status" style={{ color: ASSISTANT_COLORS[va.state] }} aria-live="polite">
+      <div className="va-status" style={{ color: `color-mix(in srgb, ${ASSISTANT_COLORS[va.state]} 72%, #fff)` }} aria-live="polite">
         {va.error && va.state === 'error' ? va.error : LABELS[va.state]}
       </div>
 

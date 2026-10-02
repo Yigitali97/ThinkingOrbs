@@ -455,9 +455,18 @@ Engines: `createStatusOrb`, `createGazeOrb`, `createMascotOrb`, `createVoiceOrb`
 
 ## Demo & development
 
-The demo page shows every component with live controls: state switchers, simulated agents, streaming, searches, uploads and reasoning runs. It also lets you try your own image or video; those stay in the browser and are never uploaded.
+The demo is a small site with four sections:
 
-Two parts of the demo are useful on their own:
+| Page | URL | |
+|---|---|---|
+| Home | `/` | the orbs by situation, the examples, and how to start |
+| Components | `/components`, `/components/<name>` | a live gallery, then one page per orb: a demo with every state, usage, a states table, props, ref methods and notes |
+| Examples | `/examples`, `/examples/<name>` | the chat app, the voice assistant, an agent run, and an ask-and-answer flow |
+| Playground | `/playground?orb=<name>` | every option of every orb; the URL keeps the setup, so it can be shared |
+
+The demos also let you try your own image, video or file; those stay in the browser and are never uploaded.
+
+Three parts of the demo are useful on their own:
 
 - **Playground** (`demo/playground/`) — pick any orb, change every option with live controls, and copy the generated JSX (including sample data) straight into your app.
 - **Voice assistant sample** (`demo/voice-assistant/`) — a working voice assistant on AssistantOrb and the browser's speech recognition and speech synthesis, with no backend: listen → think → speak, interrupt (tap the orb or press Space), mute, captions with word-by-word highlighting, and typed input as a fallback. Copy the folder and plug in your model:
@@ -514,12 +523,25 @@ Then open http://localhost:5318.
 
 | Script | |
 |---|---|
-| `npm run dev` | demo page with hot reload |
-| `npm run build` | strict type-check, then a production build of the demo |
+| `npm run dev` | the site with hot reload |
+| `npm run build` | strict type-check, then a production build of the site into `dist/` |
+| `npm run preview` | serve the production build |
 | `npm run typecheck` | type-check only |
-| `npm test` | unit tests (the chat sample's activity reducer) |
+| `npm test` | unit tests: routes, docs, the playground's URL state, the code highlighter, the agent run script and the chat sample's activity reducer |
+| `npm run test:e2e` | browser tests against the production build (Playwright, desktop and phone sizes) |
+| `npm run test:all` | all of the above |
+
+The browser tests open every page and check that it renders without errors, has no sideways scrolling and no serious accessibility violations (axe). They then drive every orb through its states and transitions and check from real screenshots that it draws, moves and uses the right colours. They also exercise every playground control, all four examples, navigation, scroll restoration, reduced motion, and that animation loops stop when orbs leave the page. The first run needs a browser: `npx playwright install chromium`.
 
 The demo's sample images and video frames are drawn in code (`demo/samples.ts`), so it works offline.
+
+### Deploying the site
+
+`npm run build` writes a static site to `dist/`, with one HTML file per page (each with its own title and description) and a `404.html`, so every URL works on any static host without rewrite rules. To serve it from a sub-path, such as GitHub Pages at `/ThinkingOrbs/`, set the base path when building:
+
+```bash
+BASE_PATH=/ThinkingOrbs/ npm run build
+```
 
 ---
 
@@ -542,10 +564,13 @@ src/orbs/
   vision/           VisionOrb
   reel/             ReelOrb, captureFrames
   ask/              AskOrb
-demo/               the demo page (main.tsx, demo.css, samples.ts)
-  playground/       the Playground
+demo/               the demo site (main.tsx, samples.ts)
+  site/             routes, router, pages, component docs, styles
+  playground/       the Playground (controls, code generation, URL state)
+  examples/         the agent run and ask-and-answer examples
   voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
   chat-app/         the chat app sample (agent protocol + demo agent, UI)
+e2e/                browser tests (Playwright)
 ```
 
 Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
