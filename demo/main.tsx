@@ -12,6 +12,9 @@ import {
   MascotOrbRef,
   STATUS_VARIANTS,
   StatusOrb,
+  TokenOrb,
+  ToolCall,
+  ToolOrb,
   useMicrophone,
   VoiceOrb,
 } from '../src/orbs';
@@ -23,6 +26,8 @@ const SECTIONS = [
   { id: 'mascot', name: 'MascotOrb' },
   { id: 'voice', name: 'VoiceOrb' },
   { id: 'assistant', name: 'AssistantOrb' },
+  { id: 'token', name: 'TokenOrb' },
+  { id: 'tool', name: 'ToolOrb' },
   { id: 'ask', name: 'AskOrb' },
 ];
 
@@ -150,7 +155,7 @@ function VoiceDemo() {
 
 // --------------------------------------------------------------- AssistantOrb
 
-const ASSISTANT_STATES: AssistantState[] = ['idle', 'listening', 'thinking', 'speaking'];
+const ASSISTANT_STATES: AssistantState[] = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'interrupted', 'muted', 'error'];
 
 function AssistantDemo() {
   const [state, setState] = useState<AssistantState>('idle');
@@ -179,6 +184,110 @@ function AssistantDemo() {
       </div>
       <div className="hint" role="status">
         {mic.error ?? 'Without audio, Speaking uses a built-in voice pattern. Turn the mic on to drive Listening with your voice.'}
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------- TokenOrb
+
+const REPLY =
+  'Sure — here is a quick summary. The fleet logged 1,284 trips this week, up 6% on last week. ' +
+  'Fuel spend fell 3% thanks to shorter idle times, and two vehicles are due for service on Friday.';
+type Pace = 'steady' | 'bursty' | 'slow';
+
+function TokenDemo() {
+  const [pace, setPace] = useState<Pace>('bursty');
+  const [text, setText] = useState('');
+  const [tokens, setTokens] = useState(0);
+  const [done, setDone] = useState(false);
+  const [run, setRun] = useState(0);
+
+  useEffect(() => {
+    const words = REPLY.split(' ').map((w, k, all) => (k < all.length - 1 ? w + ' ' : w));
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    setText('');
+    setTokens(0);
+    setDone(false);
+    const next = () => {
+      if (i >= words.length) return setDone(true);
+      // chunks of 1–3 words, with pauses that depend on the pace
+      const n = pace === 'slow' ? 1 : 1 + Math.floor(Math.random() * 3);
+      const chunk = words.slice(i, i + n).join('');
+      i += n;
+      setText((t) => t + chunk);
+      setTokens((c) => c + n);
+      const gap = pace === 'steady' ? 70 : pace === 'slow' ? 260 : Math.random() < 0.15 ? 600 : 40 + Math.random() * 60;
+      timer = setTimeout(next, gap);
+    };
+    timer = setTimeout(next, 900); // time to first token
+    return () => clearTimeout(timer);
+  }, [pace, run]);
+
+  return (
+    <div className="panel">
+      <div className="chat">
+        <div className="bubble bubble-user">How did the fleet do this week?</div>
+        <div className="bubble bubble-ai">
+          <TokenOrb tokens={tokens} done={done} size={20} />
+          <span>{text || <span className="muted-text">Thinking…</span>}</span>
+        </div>
+      </div>
+      <div className="actions" style={{ marginTop: 24 }}>
+        <div className="segmented" role="radiogroup" aria-label="Streaming pace" style={{ marginBottom: 0 }}>
+          {(['bursty', 'steady', 'slow'] as Pace[]).map((p) => (
+            <button key={p} role="radio" aria-checked={pace === p} onClick={() => setPace(p)}>
+              {p[0].toUpperCase() + p.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button className="btn" onClick={() => setRun((r) => r + 1)}>
+          Replay
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- ToolOrb
+
+const AGENT_PLAN: Array<{ at: number; id: string; label?: string; status: ToolCall['status'] }> = [
+  { at: 300, id: 'search', label: 'web_search', status: 'running' },
+  { at: 900, id: 'files', label: 'read_file', status: 'running' },
+  { at: 1500, id: 'calc', label: 'calculator', status: 'running' },
+  { at: 2600, id: 'search', status: 'done' },
+  { at: 3000, id: 'calc', status: 'error' },
+  { at: 3300, id: 'code', label: 'run_code', status: 'running' },
+  { at: 4200, id: 'files', status: 'done' },
+  { at: 5600, id: 'code', status: 'done' },
+];
+
+function ToolDemo() {
+  const [tools, setTools] = useState<ToolCall[]>([]);
+  const [run, setRun] = useState(0);
+
+  useEffect(() => {
+    setTools([]);
+    const timers = AGENT_PLAN.map((step) =>
+      setTimeout(() => {
+        setTools((list) => {
+          const found = list.find((t) => t.id === step.id);
+          if (found) return list.map((t) => (t.id === step.id ? { ...t, status: step.status } : t));
+          return [...list, { id: step.id, label: step.label, status: step.status }];
+        });
+      }, step.at)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [run]);
+
+  return (
+    <div className="panel panel-center">
+      <ToolOrb tools={tools} size={220} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => r + 1)}>
+          Run agent again
+        </button>
       </div>
     </div>
   );
@@ -221,7 +330,7 @@ function App() {
       <header className="hero">
         <StatusOrb variant="reasoning · twins" size={44} label={null} />
         <h1>Orbs</h1>
-        <p>Animated presence for AI interfaces — six React components, no dependencies beyond React.</p>
+        <p>Animated presence for AI interfaces — eight React components, no dependencies beyond React.</p>
         <nav className="nav">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`}>
@@ -270,10 +379,28 @@ function App() {
       <Section
         id="assistant"
         name="AssistantOrb"
-        blurb="A dot sphere for voice assistants — grey when idle, blue listening, orange thinking, green speaking — moving with the audio."
-        code={`<AssistantOrb state="listening" stream={mic.stream} />   // idle · listening · thinking · speaking`}
+        blurb="A dot sphere for voice assistants. Each state has its own colour and motion — idle, connecting, listening, thinking, speaking, interrupted, muted, error — and it moves with the audio."
+        code={`<AssistantOrb state="listening" stream={mic.stream} />\n// idle · connecting · listening · thinking · speaking · interrupted · muted · error`}
       >
         <AssistantDemo />
+      </Section>
+
+      <Section
+        id="token"
+        name="TokenOrb"
+        blurb="A tiny inline orb for chat replies. It pulses with every streamed chunk, so its motion is the real streaming speed — and settles green when the reply is done."
+        code={`<TokenOrb tokens={tokenCount} done={!streaming} size={20} />\n// or call ref.current.push(n) for each streamed chunk`}
+      >
+        <TokenDemo />
+      </Section>
+
+      <Section
+        id="tool"
+        name="ToolOrb"
+        blurb="One satellite per tool call. Running tools orbit the core; finished ones spiral in and dock with a flash; failed ones turn red and fall away."
+        code={`<ToolOrb tools={[\n  { id: 'search', label: 'web_search', status: 'running' },   // running · done · error\n]} />`}
+      >
+        <ToolDemo />
       </Section>
 
       <Section
@@ -286,7 +413,7 @@ function App() {
       </Section>
 
       <footer className="footer">
-        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, AskOrb } from './orbs';`}</code>
+        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, TokenOrb, ToolOrb, AskOrb } from './orbs';`}</code>
       </footer>
     </div>
   );
