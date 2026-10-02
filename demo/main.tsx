@@ -5,6 +5,9 @@ import {
   AskOrb,
   GazeOrb,
   GazeOrbRef,
+  ASSISTANT_COLORS,
+  AssistantOrb,
+  AssistantState,
   MascotOrb,
   MascotOrbRef,
   STATUS_VARIANTS,
@@ -19,6 +22,7 @@ const SECTIONS = [
   { id: 'gaze', name: 'GazeOrb' },
   { id: 'mascot', name: 'MascotOrb' },
   { id: 'voice', name: 'VoiceOrb' },
+  { id: 'assistant', name: 'AssistantOrb' },
   { id: 'ask', name: 'AskOrb' },
 ];
 
@@ -144,6 +148,42 @@ function VoiceDemo() {
   );
 }
 
+// --------------------------------------------------------------- AssistantOrb
+
+const ASSISTANT_STATES: AssistantState[] = ['idle', 'listening', 'thinking', 'speaking'];
+
+function AssistantDemo() {
+  const [state, setState] = useState<AssistantState>('idle');
+  const mic = useMicrophone();
+  return (
+    <div className="panel panel-center panel-black">
+      <div className="segmented" role="radiogroup" aria-label="Assistant state">
+        {ASSISTANT_STATES.map((s) => (
+          <button key={s} role="radio" aria-checked={state === s} onClick={() => setState(s)}>
+            <span className="swatch" style={{ background: ASSISTANT_COLORS[s] }} />
+            {s[0].toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="voice-stage">
+        <AssistantOrb state={state} size={340} stream={mic.stream} />
+      </div>
+      <div className="assistant-caption" style={{ color: ASSISTANT_COLORS[state] }} aria-live="polite">
+        {state}
+      </div>
+      <div className="actions">
+        <button className="btn" onClick={mic.toggle} aria-pressed={mic.recording} disabled={mic.pending}>
+          <MicIcon />
+          {mic.pending ? 'Waiting for microphone…' : mic.recording ? 'Microphone on' : 'Use microphone'}
+        </button>
+      </div>
+      <div className="hint" role="status">
+        {mic.error ?? 'Without audio, Speaking uses a built-in voice pattern. Turn the mic on to drive Listening with your voice.'}
+      </div>
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------- AskOrb
 
 const failingAgent: AskHandler = async (_q, report, signal) => {
@@ -181,7 +221,7 @@ function App() {
       <header className="hero">
         <StatusOrb variant="reasoning · twins" size={44} label={null} />
         <h1>Orbs</h1>
-        <p>Animated presence for AI interfaces — five React components, no dependencies beyond React.</p>
+        <p>Animated presence for AI interfaces — six React components, no dependencies beyond React.</p>
         <nav className="nav">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`}>
@@ -228,6 +268,15 @@ function App() {
       </Section>
 
       <Section
+        id="assistant"
+        name="AssistantOrb"
+        blurb="A dot sphere for voice assistants — grey when idle, blue listening, orange thinking, green speaking — moving with the audio."
+        code={`<AssistantOrb state="listening" stream={mic.stream} />   // idle · listening · thinking · speaking`}
+      >
+        <AssistantDemo />
+      </Section>
+
+      <Section
         id="ask"
         name="AskOrb"
         blurb="The whole flow: prompt bar → thinking orb with live stages → answer card. Drive the stages from your agent."
@@ -237,7 +286,7 @@ function App() {
       </Section>
 
       <footer className="footer">
-        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AskOrb } from './orbs';`}</code>
+        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, AskOrb } from './orbs';`}</code>
       </footer>
     </div>
   );

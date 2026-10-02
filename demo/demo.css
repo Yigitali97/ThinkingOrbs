@@ -188,6 +188,25 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
 .voice-stage { max-width: 100%; }
 .voice-stage canvas { max-width: 100%; height: auto !important; aspect-ratio: 1; }
 
+/* ------------------------------------------------------------- AssistantOrb */
+
+.assistant-caption {
+  margin-top: -8px;
+  font: 500 12px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  transition: color 0.4s;
+}
+.swatch {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+.panel-black .segmented { background: #050506; }
+
 /* ------------------------------------------------------------- footer */
 
 .footer {

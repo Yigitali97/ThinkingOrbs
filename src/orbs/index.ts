@@ -4,3 +4,4 @@ export * from './gaze';
 export * from './mascot';
 export * from './voice';
 export * from './ask';
+export * from './assistant';
