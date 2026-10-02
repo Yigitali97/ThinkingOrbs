@@ -14,8 +14,13 @@ for (const path of ALL_PATHS) {
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('h1')).toBeVisible();
 
-    // the first orb on the page draws
-    const canvas = page.locator('main canvas').first();
+    // the page's main orb (its largest canvas) draws
+    await page.evaluate(() => {
+      const all = [...document.querySelectorAll('main canvas')];
+      const area = (c: Element) => c.getBoundingClientRect().width * c.getBoundingClientRect().height;
+      all.sort((a, b) => area(b) - area(a))[0]?.setAttribute('data-main-orb', '');
+    });
+    const canvas = page.locator('main canvas[data-main-orb]');
     if (await canvas.count()) {
       await canvas.scrollIntoViewIfNeeded();
       await expect.poll(async () => (await pixels(canvas)).lit, { message: 'first orb draws' }).toBeGreaterThan(0.002);
@@ -43,6 +48,6 @@ test('unknown pages show the not-found page', async ({ page }) => {
   await expect(page.locator('h1')).toHaveText('No page at /components/not-a-real-orb');
   await expect(page).toHaveTitle(/Page not found/);
   await page.getByRole('link', { name: 'Browse components' }).click();
-  await expect(page).toHaveURL(/\/components$/);
-  await expect(page.locator('h1')).toHaveText('Components');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('h1')).toHaveText('AssistantOrb');
 });

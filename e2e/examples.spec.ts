@@ -18,7 +18,7 @@ test.describe('Chat app', () => {
   for (const hint of HINTS.filter((h) => !h.dictate)) {
     test(`"${hint.label}" shows ${hint.orb}, then answers`, async ({ page }) => {
       test.setTimeout(90_000);
-      await page.goto('/examples/chat-app');
+      await page.goto('/examples#chat-app');
       const app = page.locator('.ca');
       await app.locator('.ca-card', { hasText: hint.label }).click();
       await expect(app.locator('.ca-user').first()).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('Chat app', () => {
   }
 
   test('typing a message, stopping a reply, and starting a new chat', async ({ page }) => {
-    await page.goto('/examples/chat-app');
+    await page.goto('/examples#chat-app');
     const app = page.locator('.ca');
     const box = app.getByRole('textbox', { name: 'Message' });
     await box.fill('What is 12 times 7?');
@@ -57,7 +57,7 @@ test.describe('Chat app', () => {
 
 test.describe('Voice assistant', () => {
   test('answers a typed message aloud and can be interrupted', async ({ page }) => {
-    await page.goto('/examples/voice-assistant');
+    await page.goto('/examples#voice-assistant');
     const va = page.locator('.va');
     const orb = va.locator('.va-orb canvas');
     await expectAnimating(orb, { minDiff: 0.05 });
@@ -78,8 +78,9 @@ test.describe('Voice assistant', () => {
 
 test.describe('Agent run', () => {
   test('goes thinking → searching → tools → answer, with a summary per stage', async ({ page }) => {
-    await page.goto('/examples/agent-run');
+    await page.goto('/examples#agent-run');
     const ar = page.locator('.ar');
+    await expect(ar.locator('.ar-head-label')).toBeVisible(); // examples mount as you reach them
     // record every status the header passes through, however briefly
     await page.evaluate(() => {
       const w = window as unknown as { stages: string[] };
@@ -91,7 +92,11 @@ test.describe('Agent run', () => {
       }).observe(el, { childList: true, characterData: true, subtree: true });
     });
     await expect(ar.locator('.ar-head-label')).toHaveText('Thinking', { timeout: 15_000 });
+    // pausing stops the run's clock, not the orb: it keeps moving
+    await ar.getByRole('button', { name: 'Pause' }).click();
     await expectAnimating(ar.locator('.ar-stage canvas'));
+    await expect(ar.locator('.ar-head-label')).toHaveText('Thinking');
+    await ar.getByRole('button', { name: 'Resume' }).click();
     await ar.getByRole('radio', { name: '2×' }).click();
     await expect(ar.locator('.ar-head-label')).toHaveText('Done', { timeout: 30_000 });
     const stages = await page.evaluate(() => (window as unknown as { stages: string[] }).stages);
@@ -102,7 +107,7 @@ test.describe('Agent run', () => {
   });
 
   test('pauses, resumes and restarts', async ({ page }) => {
-    await page.goto('/examples/agent-run');
+    await page.goto('/examples#agent-run');
     const ar = page.locator('.ar');
     await page.waitForTimeout(1200);
     await ar.getByRole('button', { name: 'Pause' }).click();
@@ -119,7 +124,7 @@ test.describe('Agent run', () => {
 
 test.describe('Ask and answer', () => {
   test('answers with React content', async ({ page }) => {
-    await page.goto('/examples/ask-flow');
+    await page.goto('/examples#ask-flow');
     const input = page.getByRole('textbox', { name: 'Ask anything...' });
     await input.fill('What is an orb?');
     await input.press('Enter');
@@ -128,7 +133,7 @@ test.describe('Ask and answer', () => {
   });
 
   test('shows the error card when the agent fails', async ({ page }) => {
-    await page.goto('/examples/ask-flow');
+    await page.goto('/examples#ask-flow');
     await page.getByRole('radio', { name: 'Fails while searching' }).click();
     const input = page.getByRole('textbox', { name: 'Ask anything...' });
     await input.fill('Will this work?');

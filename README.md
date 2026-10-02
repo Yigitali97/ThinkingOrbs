@@ -455,13 +455,12 @@ Engines: `createStatusOrb`, `createGazeOrb`, `createMascotOrb`, `createVoiceOrb`
 
 ## Demo & development
 
-The demo is a small site with four sections:
+The demo is a small site with three sections:
 
 | Page | URL | |
 |---|---|---|
-| Home | `/` | the orbs by situation, the examples, and how to start |
-| Components | `/components`, `/components/<name>` | a live gallery, then one page per orb: a demo with every state, usage, a states table, props, ref methods and notes |
-| Examples | `/examples`, `/examples/<name>` | the chat app, the voice assistant, an agent run, and an ask-and-answer flow |
+| Components | `/` (the first orb), `/components/<name>` | one page per orb: a demo with every state, usage, a states table, props, ref methods and notes |
+| Examples | `/examples` | all four examples on one page (the chat app, the voice assistant, an agent run and an ask-and-answer flow), each starting when you scroll to it; `/examples#agent-run` links straight to one |
 | Playground | `/playground?orb=<name>` | every option of every orb; the URL keeps the setup, so it can be shared |
 
 The demos also let you try your own image, video or file; those stay in the browser and are never uploaded.

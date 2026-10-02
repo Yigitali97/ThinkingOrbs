@@ -65,8 +65,17 @@ if (typeof window !== 'undefined') {
   history.replaceState({ ...(history.state ?? {}), key: entryKey }, '');
   window.addEventListener('popstate', (e) => {
     scrolls.set(entryKey, window.scrollY);
-    entryKey = (e.state as { key?: string } | null)?.key ?? newKey();
-    pendingScroll = { kind: 'restore', y: scrolls.get(entryKey) ?? 0 };
+    const key = (e.state as { key?: string } | null)?.key;
+    if (key) {
+      // back/forward: return to where that page was
+      entryKey = key;
+      pendingScroll = { kind: 'restore', y: scrolls.get(key) ?? 0 };
+    } else {
+      // a plain #anchor link: the browser already scrolled to it; give the entry a key
+      entryKey = newKey();
+      history.replaceState({ key: entryKey }, '');
+      pendingScroll = null;
+    }
     emit();
   });
 }
@@ -112,6 +121,8 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
   to: string;
   /** Mark as current when the path starts with `to` (for section links). */
   section?: boolean;
+  /** Mark as current for any path this accepts, as well as `to` itself. */
+  match?: (path: string) => boolean;
 }
 
 export function isActive(current: string, to: string, section = false) {
@@ -120,9 +131,12 @@ export function isActive(current: string, to: string, section = false) {
   return current === target;
 }
 
-export function Link({ to, section, onClick, ...rest }: LinkProps) {
+export function Link({ to, section, match, onClick, ...rest }: LinkProps) {
   const loc = useLocation();
-  const current = isActive(loc.path, to) ? 'page' : isActive(loc.path, to, section) ? 'true' : undefined;
+  const exact = isActive(loc.path, to) || (!section && !!match?.(loc.path));
+  const inSection = isActive(loc.path, to, section) || !!match?.(loc.path);
+  // a link to a part of a page (#anchor) never stands for the current page
+  const current = to.includes('#') ? undefined : exact ? 'page' : inSection ? 'true' : undefined;
   const handle = (e: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(e);
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

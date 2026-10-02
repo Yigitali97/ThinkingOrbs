@@ -1,41 +1,9 @@
 import { CSSProperties } from 'react';
-import { DEMOS, THUMBS } from '../demos';
+import { DEMOS } from '../demos';
 import { DOCS } from '../docs';
 import { Link } from '../router';
-import { ComponentMeta, COMPONENTS, GROUPS } from '../routes';
-import { CodeBlock, InView } from '../ui';
-
-export function ComponentsIndex() {
-  return (
-    <div className="page">
-      <header className="page-head">
-        <h1>Components</h1>
-        <p className="lede">Thirteen orbs, grouped by the situation they are for. Every one takes a className and style, and sizes are in CSS pixels.</p>
-      </header>
-      {GROUPS.map((group) => (
-        <section key={group} className="gallery-group" aria-labelledby={`g-${group}`}>
-          <h2 id={`g-${group}`}>{group}</h2>
-          <div className="gallery">
-            {COMPONENTS.filter((c) => c.group === group).map((c) => {
-              const Thumb = THUMBS[c.slug];
-              return (
-                <Link key={c.slug} to={`/components/${c.slug}`} className="gallery-card" style={{ '--tint': c.tint } as CSSProperties}>
-                  <InView width="100%" height={180} className="gallery-thumb">
-                    <span aria-hidden="true" className="gallery-thumb-inner">
-                      <Thumb size={140} />
-                    </span>
-                  </InView>
-                  <h3>{c.name}</h3>
-                  <p>{c.summary}</p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
-}
+import { ComponentMeta, COMPONENTS, GROUPS, isHome } from '../routes';
+import { CodeBlock } from '../ui';
 
 function Sidebar({ current }: { current: string }) {
   return (
@@ -46,7 +14,12 @@ function Sidebar({ current }: { current: string }) {
           <ul>
             {COMPONENTS.filter((c) => c.group === group).map((c) => (
               <li key={c.slug}>
-                <Link to={`/components/${c.slug}`} style={{ '--tint': c.tint } as CSSProperties} className={c.slug === current ? 'is-current' : undefined}>
+                <Link
+                  to={`/components/${c.slug}`}
+                  match={c === COMPONENTS[0] ? isHome : undefined}
+                  style={{ '--tint': c.tint } as CSSProperties}
+                  className={c.slug === current ? 'is-current' : undefined}
+                >
                   {c.name}
                 </Link>
               </li>
@@ -71,7 +44,7 @@ export function ComponentPage({ meta }: { meta: ComponentMeta }) {
       <article className="doc">
         <header className="page-head">
           <p className="crumb">
-            <Link to="/components">Components</Link> <span aria-hidden="true">/</span> {meta.group}
+            <Link to="/">Components</Link> <span aria-hidden="true">/</span> {meta.group}
           </p>
           <h1 className="doc-title">{meta.name}</h1>
           <p className="lede">{doc.intro}</p>
