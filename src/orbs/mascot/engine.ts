@@ -1,10 +1,10 @@
 /*
- * Bubble Orb engine — a glossy blue bubble with glowing pill eyes that
+ * Mascot Orb engine — a glossy blue bubble with glowing pill eyes that
  * blink (left eye leading), glance toward the pointer, and wobble like
  * jelly when pressed. Framework-free canvas renderer.
  */
 
-export interface BubbleOrbOptions {
+export interface MascotOrbOptions {
   /** CSS pixel width/height of the canvas (the bubble fills ~70%, the rest is glow). */
   size?: number;
   /** Main body tint. */
@@ -15,8 +15,8 @@ export interface BubbleOrbOptions {
   bouncy?: boolean;
 }
 
-export interface BubbleOrbHandle {
-  update(opts: BubbleOrbOptions): void;
+export interface MascotOrbHandle {
+  update(opts: MascotOrbOptions): void;
   blink(): void;
   /** Trigger the jelly bounce. */
   bounce(strength?: number): void;
@@ -96,9 +96,9 @@ function pill(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, 
   ctx.closePath();
 }
 
-export function createBubbleOrb(canvas: HTMLCanvasElement, opts: BubbleOrbOptions = {}): BubbleOrbHandle {
+export function createMascotOrb(canvas: HTMLCanvasElement, opts: MascotOrbOptions = {}): MascotOrbHandle {
   const maybeCtx = canvas.getContext('2d');
-  if (!maybeCtx) throw new Error('BubbleOrb: 2D canvas context unavailable');
+  if (!maybeCtx) throw new Error('MascotOrb: 2D canvas context unavailable');
   const ctx: CanvasRenderingContext2D = maybeCtx;
 
   const o = { size: 240, color: '#5f9ae6', blinking: true, bouncy: true, ...opts };

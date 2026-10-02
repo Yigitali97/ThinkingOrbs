@@ -1,9 +1,9 @@
 'use client';
 
 import { CSSProperties, forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { BubbleOrbHandle, createBubbleOrb } from './engine';
+import { MascotOrbHandle, createMascotOrb } from './engine';
 
-export interface BubbleOrbProps {
+export interface MascotOrbProps {
   /** Canvas width and height in CSS pixels; the bubble fills ~70%, the rest is glow room. */
   size?: number;
   /** Body tint as a hex color. */
@@ -18,23 +18,23 @@ export interface BubbleOrbProps {
   style?: CSSProperties;
 }
 
-export interface BubbleOrbRef {
+export interface MascotOrbRef {
   blink(): void;
   /** Trigger the jelly bounce, e.g. when a reply arrives. */
   bounce(strength?: number): void;
 }
 
-export const BubbleOrb = forwardRef<BubbleOrbRef, BubbleOrbProps>(function BubbleOrb(
-  { size = 240, color = '#5f9ae6', blinking = true, bouncy = true, label = 'Bubble character', className, style },
+export const MascotOrb = forwardRef<MascotOrbRef, MascotOrbProps>(function MascotOrb(
+  { size = 240, color = '#5f9ae6', blinking = true, bouncy = true, label = 'Orb mascot', className, style },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const orbRef = useRef<BubbleOrbHandle | null>(null);
+  const orbRef = useRef<MascotOrbHandle | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const orb = createBubbleOrb(canvas, { size, color, blinking, bouncy });
+    const orb = createMascotOrb(canvas, { size, color, blinking, bouncy });
     orbRef.current = orb;
     return () => {
       orb.destroy();
@@ -68,4 +68,4 @@ export const BubbleOrb = forwardRef<BubbleOrbRef, BubbleOrbProps>(function Bubbl
   );
 });
 
-export default BubbleOrb;
+export default MascotOrb;
