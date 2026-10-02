@@ -4,7 +4,10 @@ import { CSSProperties, useEffect, useRef } from 'react';
 import { AssistantOrbHandle, AssistantState, createAssistantOrb } from './engine';
 
 export interface AssistantOrbProps {
-  /** idle (grey) · listening (blue) · thinking (orange) · speaking (green). Transitions are animated. */
+  /**
+   * idle (grey) · connecting (indigo) · listening (blue) · thinking (orange) · speaking (green)
+   * · interrupted (light blue) · muted (dim grey) · error (red). Transitions are animated.
+   */
   state?: AssistantState;
   /** Width and height in CSS pixels. */
   size?: number;

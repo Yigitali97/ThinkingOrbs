@@ -1,12 +1,21 @@
 /*
  * Assistant Orb engine — a sphere of dots whose color and motion follow a
  * voice assistant's state: idle (grey), listening (blue), thinking (orange),
- * speaking (green). Audio from a stream or a level callback drives the dots.
+ * speaking (green), plus connecting, muted, interrupted and error. Audio from
+ * a stream or a level callback drives the dots.
  */
 
 import { StreamAnalyser } from '../shared/audio';
 
-export type AssistantState = 'idle' | 'listening' | 'thinking' | 'speaking';
+export type AssistantState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'interrupted'
+  | 'muted'
+  | 'error';
 
 export interface AssistantOrbOptions {
   /** CSS pixel width/height of the canvas. */
@@ -27,9 +36,13 @@ export interface AssistantOrbHandle {
 
 export const ASSISTANT_COLORS: Record<AssistantState, string> = {
   idle: '#9a9aa3',
+  connecting: '#8b8fff',
   listening: '#3b8bff',
   thinking: '#ff9a2e',
   speaking: '#34d399',
+  interrupted: '#9fc3ff',
+  muted: '#5c5c66',
+  error: '#f05252',
 };
 
 interface Mix {
@@ -38,13 +51,22 @@ interface Mix {
   think: number;
   speak: number;
   glow: number;
+  connect: number; // bands of dots assembling
+  dim: number; // overall brightness
+  err: number; // glitch flicker + red pulse
+  scale: number; // resting size
 }
 
 const MIX: Record<AssistantState, Mix> = {
-  idle: { spin: 0.22, listen: 0, think: 0, speak: 0, glow: 0.35 },
-  listening: { spin: 0.35, listen: 1, think: 0, speak: 0, glow: 0.8 },
-  thinking: { spin: 1.1, listen: 0, think: 1, speak: 0, glow: 0.8 },
-  speaking: { spin: 0.45, listen: 0, think: 0, speak: 1, glow: 1 },
+  idle: { spin: 0.22, listen: 0, think: 0, speak: 0, glow: 0.35, connect: 0, dim: 1, err: 0, scale: 1 },
+  connecting: { spin: 0.6, listen: 0, think: 0, speak: 0, glow: 0.5, connect: 1, dim: 0.85, err: 0, scale: 0.96 },
+  listening: { spin: 0.35, listen: 1, think: 0, speak: 0, glow: 0.8, connect: 0, dim: 1, err: 0, scale: 1 },
+  thinking: { spin: 1.1, listen: 0, think: 1, speak: 0, glow: 0.8, connect: 0, dim: 1, err: 0, scale: 1 },
+  speaking: { spin: 0.45, listen: 0, think: 0, speak: 1, glow: 1, connect: 0, dim: 1, err: 0, scale: 1 },
+  // the user cut in: yield (shrink) and listen
+  interrupted: { spin: 0.3, listen: 0.8, think: 0, speak: 0, glow: 0.6, connect: 0, dim: 1, err: 0, scale: 0.9 },
+  muted: { spin: 0.06, listen: 0, think: 0, speak: 0, glow: 0.12, connect: 0, dim: 0.45, err: 0, scale: 0.92 },
+  error: { spin: 0.05, listen: 0, think: 0, speak: 0, glow: 0.75, connect: 0, dim: 0.9, err: 1, scale: 0.97 },
 };
 
 const TAU = Math.PI * 2;
@@ -96,7 +118,7 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
     phase[i] = ((Math.sin(i * 12.9898) * 43758.5453) % 1) * TAU;
   }
   const sx = new Float32Array(DOTS), sy = new Float32Array(DOTS), sz = new Float32Array(DOTS);
-  const sp = new Float32Array(DOTS), sb = new Float32Array(DOTS);
+  const sp = new Float32Array(DOTS), sb = new Float32Array(DOTS), sa = new Float32Array(DOTS);
   const order = new Uint16Array(DOTS);
   for (let i = 0; i < DOTS; i++) order[i] = i;
 
@@ -116,6 +138,10 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
   const rgb = colorOf(o.state).map(Number) as [number, number, number];
   let level = 0;
   let rot = 0;
+  // one-off reactions when a state begins
+  let shownState = o.state;
+  let pop = 0, popV = 0; // springy scale offset
+  let shake = 0; // error glitch, decays
   const cT = Math.cos(TILT), sT = Math.sin(TILT);
 
   let raf = 0;
@@ -134,11 +160,25 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
     const tc = colorOf(o.state);
     for (let i = 0; i < 3; i++) rgb[i] += (tc[i] - rgb[i]) * k;
 
+    if (o.state !== shownState) {
+      if (o.state === 'interrupted') popV -= 2.4;
+      if (o.state === 'error') {
+        shake = 1;
+        popV -= 0.8;
+      }
+      if (o.state === 'listening' || o.state === 'speaking') popV += 0.6;
+      shownState = o.state;
+    }
+    popV += (-170 * pop - 13 * popV) * dt;
+    pop += popV * dt;
+    shake *= Math.exp(-3.5 * dt);
+
     // audio level
     let raw = 0;
     if (analyser) raw = analyser.read().level;
     else if (o.getLevel) raw = clamp(o.getLevel(), 0, 1);
     else if (o.state === 'speaking') raw = syntheticVoice(t);
+    if (o.state === 'muted') raw = 0; // muted ignores audio entirely
     level += (raw - level) * (1 - Math.exp(-(raw > level ? 16 : 5) * dt));
 
     rot += dt * mix.spin * (reduceMotion ? 0.25 : 1);
@@ -152,6 +192,7 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
     const R = W * 0.36;
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const breathe = 0.015 * Math.sin(t * 1.4);
+    const scale = mix.scale * (1 + pop);
     // thinking: a band sweeping down the sphere
     const band = 1.25 - 2.5 * ((t % 1.3) / 1.3);
 
@@ -167,6 +208,22 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
       const front = (z + 1) / 2;
       let disp = breathe;
       let boost = 0;
+      let alphaMul = 1;
+
+      if (mix.connect > 0.01) {
+        // bands of dots rising up the sphere, as if it is assembling
+        const wave = 0.5 + 0.5 * Math.sin(ly * 5 - t * 5);
+        disp += mix.connect * 0.06 * (1 - wave);
+        alphaMul *= 1 - mix.connect * 0.55 * (1 - wave);
+        boost = Math.max(boost, mix.connect * 0.5 * wave * wave);
+      }
+      if (mix.err > 0.01) {
+        // glitch: a sideways shake on entry, then dots flickering out
+        x += shake * 0.06 * Math.sin(t * 52 + phase[i] * 3);
+        const flick = Math.sin(phase[i] * 7.3 + Math.floor(t * 10) * 1.7);
+        if (flick > 0.82) alphaMul *= 1 - 0.85 * mix.err;
+        boost = Math.max(boost, mix.err * 0.35 * (0.5 + 0.5 * Math.sin(t * 3)));
+      }
 
       if (mix.listen > 0.01) {
         // dots shiver outward with the voice, strongest facing the user
@@ -188,7 +245,7 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
         boost = Math.max(boost, mix.speak * level * ripple);
       }
 
-      const s = 1 + disp;
+      const s = (1 + disp) * scale;
       x *= s;
       y *= s;
       z *= s;
@@ -198,6 +255,7 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
       sz[i] = z;
       sp[i] = p;
       sb[i] = clamp(boost, 0, 1);
+      sa[i] = alphaMul;
     }
     order.sort((a, b) => sz[a] - sz[b]);
 
@@ -206,7 +264,8 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
     // soft halo in the state color
     const [r, g, b] = rgb.map((v) => Math.round(v));
     const halo = ctx.createRadialGradient(c, c, R * 0.2, c, c, R * 1.45);
-    const ha = (0.1 + 0.18 * level) * mix.glow;
+    const errPulse = mix.err * 0.12 * (0.5 + 0.5 * Math.sin(t * 3));
+    const ha = (0.1 + 0.18 * level * (mix.listen + mix.speak) + errPulse) * mix.glow;
     halo.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${ha})`);
     halo.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
     ctx.fillStyle = halo;
@@ -217,7 +276,7 @@ export function createAssistantOrb(canvas: HTMLCanvasElement, opts: AssistantOrb
       const i = order[j];
       const depth = clamp((sz[i] + 1) / 2, 0, 1);
       const bo = sb[i];
-      const alpha = clamp(0.08 + 0.8 * Math.pow(depth, 1.5) + 0.35 * bo * depth, 0, 1);
+      const alpha = clamp((0.08 + 0.8 * Math.pow(depth, 1.5) + 0.35 * bo * depth) * mix.dim * sa[i], 0, 1);
       const rad = rd * sp[i] * (0.5 + 0.6 * depth) * (1 + 0.55 * bo);
       // boosted dots run hotter, toward white
       const w = 0.45 * bo;
