@@ -457,6 +457,17 @@ Engines: `createStatusOrb`, `createGazeOrb`, `createMascotOrb`, `createVoiceOrb`
 
 The demo page shows every component with live controls: state switchers, simulated agents, streaming, searches, uploads and reasoning runs. It also lets you try your own image or video; those stay in the browser and are never uploaded.
 
+Two parts of the demo are useful on their own:
+
+- **Playground** (`demo/playground/`) — pick any orb, change every option with live controls, and copy the generated JSX (including sample data) straight into your app.
+- **Voice assistant sample** (`demo/voice-assistant/`) — a working voice assistant on AssistantOrb and the browser's speech recognition and speech synthesis, with no backend: listen → think → speak, interrupt (tap the orb or press Space), mute, captions with word-by-word highlighting, and typed input as a fallback. Copy the folder and plug in your model:
+
+  ```tsx
+  <VoiceAssistant respond={(text, signal) => callYourModel(text, { signal })} />
+  ```
+
+  Speech recognition works in Chrome, Edge and Safari; in other browsers the sample still answers typed messages aloud.
+
 ```bash
 npm install
 ```
@@ -497,6 +508,8 @@ src/orbs/
   reel/             ReelOrb, captureFrames
   ask/              AskOrb
 demo/               the demo page (main.tsx, demo.css, samples.ts)
+  playground/       the Playground
+  voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
 ```
 
 Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
