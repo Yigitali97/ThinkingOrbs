@@ -1,9 +1,40 @@
 import { CSSProperties } from 'react';
 import { DEMOS } from '../demos';
-import { DOCS } from '../docs';
+import { DOCS, Prop } from '../docs';
 import { Link } from '../router';
 import { ComponentMeta, COMPONENTS, GROUPS, isHome } from '../routes';
 import { CodeBlock } from '../ui';
+
+export function PropsTable({ props, labelledBy }: { props: Prop[]; labelledBy: string }) {
+  return (
+    <div className="table-wrap" role="region" aria-labelledby={labelledBy} tabIndex={0}>
+      <table className="table table-props">
+        <thead>
+          <tr>
+            <th scope="col">Prop</th>
+            <th scope="col">Type</th>
+            <th scope="col">Default</th>
+            <th scope="col">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.map((p) => (
+            <tr key={p.name}>
+              <td>
+                <code>{p.name}</code>
+              </td>
+              <td>
+                <code className="type">{p.type}</code>
+              </td>
+              <td>{p.def === 'required' ? <span className="required">required</span> : <code>{p.def}</code>}</td>
+              <td>{p.about}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function Sidebar({ current }: { current: string }) {
   return (
@@ -96,32 +127,7 @@ export function ComponentPage({ meta }: { meta: ComponentMeta }) {
 
         <section aria-labelledby="props">
           <h2 id="props">Props</h2>
-          <div className="table-wrap" role="region" aria-labelledby="props" tabIndex={0}>
-            <table className="table table-props">
-              <thead>
-                <tr>
-                  <th scope="col">Prop</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Default</th>
-                  <th scope="col">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {doc.props.map((p) => (
-                  <tr key={p.name}>
-                    <td>
-                      <code>{p.name}</code>
-                    </td>
-                    <td>
-                      <code className="type">{p.type}</code>
-                    </td>
-                    <td>{p.def === 'required' ? <span className="required">required</span> : <code>{p.def}</code>}</td>
-                    <td>{p.about}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PropsTable props={doc.props} labelledBy="props" />
         </section>
 
         {doc.methods && (
