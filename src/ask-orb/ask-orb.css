@@ -1,0 +1,309 @@
+/* Ask Orb — prompt bar → thinking orb → answer card. Classes are prefixed `ao-`. */
+
+.ao {
+  --ao-bg: #111214;
+  --ao-text: #ececee;
+  --ao-muted: #8a8a90;
+  --ao-green: #34d399;
+  --ao-red: #f87171;
+  position: relative;
+  min-height: 560px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ao-bg);
+  color: var(--ao-text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  isolation: isolate;
+}
+
+/* faint dot grid + ambient light behind the orb */
+.ao-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(520px circle at 50% 40%, rgba(255, 255, 255, 0.045), transparent 70%),
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1.3px) 0 0 / 22px 22px;
+}
+
+/* ------------------------------------------------------------- stage */
+
+.ao-slot {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 0;
+  height: 0;
+}
+.ao-orb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.ao-orb canvas { display: block; }
+
+.ao-label {
+  position: absolute;
+  left: 0;
+  top: 104px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 15px;
+  color: #c9c9ce;
+  transition: color 0.3s;
+}
+.ao-label[data-done='true'] { color: var(--ao-green); }
+.ao-dots { display: inline-flex; gap: 3px; }
+.ao-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: ao-dot 1.2s infinite ease-in-out;
+}
+.ao-dots i:nth-child(2) { animation-delay: 0.15s; }
+.ao-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ao-dot { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+
+.ao-solid {
+  position: absolute;
+  left: -70px;
+  top: -70px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(225, 255, 240, 0.8), rgba(160, 245, 205, 0.25) 14%, transparent 34%),
+    radial-gradient(circle at 50% 50%, #36d69b 0%, #2fcc92 62%, #1f9a6d 100%);
+  box-shadow: 0 0 60px rgba(52, 211, 153, 0.18), inset 0 0 0 1px rgba(200, 255, 230, 0.25);
+}
+
+/* ------------------------------------------------------------- flight */
+
+.ao-traveler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 36% 30%, #3b3b40, #161618 55%, #0b0b0c);
+  box-shadow: inset 0 0 0 1.5px rgba(140, 180, 160, 0.45), 0 0 24px rgba(120, 140, 255, 0.12);
+}
+.ao-trail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  height: 260%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12), transparent);
+  filter: blur(6px);
+  z-index: -1;
+}
+
+/* ------------------------------------------------------------- answer */
+
+.ao-answer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.ao-card {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 300px;
+  max-width: min(440px, calc(100vw - 48px));
+  padding: 22px 26px 26px;
+  border-radius: 22px;
+  background: #060606;
+  border: 1px solid #26262a;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.ao-card::before {
+  /* green light leaking in from the left, like the reference */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(160px 120px at 0% 70%, rgba(52, 211, 153, 0.16), transparent 70%);
+  pointer-events: none;
+}
+.ao-card[data-error='true']::before {
+  background: radial-gradient(160px 120px at 0% 70%, rgba(248, 113, 113, 0.14), transparent 70%);
+}
+.ao-card-fill {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 34% 28%, #9af0c9, #34d399 45%, #1f8f66);
+  opacity: 0;
+  pointer-events: none;
+}
+.ao-card-body { position: relative; }
+.ao-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ao-muted);
+}
+.ao-kicker::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ao-green);
+}
+.ao-card[data-error='true'] .ao-kicker::before { background: var(--ao-red); }
+.ao-text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ao-text);
+  white-space: pre-wrap;
+}
+.ao-new {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 26px);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dcdce0;
+  font: inherit;
+  font-size: 17px;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.4s, color 0.15s, background 0.15s;
+}
+.ao-new[data-show='true'] { opacity: 1; }
+.ao-new:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+.ao-new:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+/* ------------------------------------------------------------- prompt bar */
+
+.ao-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  width: min(560px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+.ao-bar {
+  position: relative;
+  height: 58px;
+  margin: 0 auto;
+  border-radius: 999px;
+  padding: 1.5px;
+  box-sizing: border-box;
+  background: linear-gradient(90deg, #d4b72c, #3ccf78, #2bb3c9, #6366f1, #a855f7, #e0558f, #d4b72c) 0 0 / 300% 100%;
+  animation: ao-flow 9s linear infinite;
+}
+@keyframes ao-flow { to { background-position: 300% 0; } }
+.ao-bar-inner {
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  background: #19191b;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px 0 20px;
+}
+.ao-bar:focus-within { box-shadow: 0 0 0 4px rgba(120, 120, 255, 0.06); }
+
+.ao-blobs { position: absolute; inset: 0; pointer-events: none; }
+.ao-blob {
+  position: absolute;
+  bottom: -70%;
+  width: 34%;
+  height: 120%;
+  border-radius: 50%;
+  filter: blur(20px);
+  opacity: 0.4;
+  animation: ao-drift 7s ease-in-out infinite alternate;
+}
+.ao-blob:nth-child(1) { left: 8%; background: #10b981; animation-duration: 7.5s; }
+.ao-blob:nth-child(2) { left: 32%; background: #e11d48; animation-duration: 6.2s; animation-delay: -2s; }
+.ao-blob:nth-child(3) { left: 54%; background: #6366f1; animation-duration: 8.4s; animation-delay: -4s; }
+.ao-blob:nth-child(4) { left: 74%; background: #f59e0b; animation-duration: 6.8s; animation-delay: -1s; }
+@keyframes ao-drift {
+  0% { transform: translateX(-24px) scale(1); opacity: 0.28; }
+  100% { transform: translateX(28px) scale(1.15); opacity: 0.48; }
+}
+/* colored light spilling under the bar */
+.ao-spill {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 70%;
+  height: 60px;
+  pointer-events: none;
+  filter: blur(18px);
+  opacity: 0.2;
+  z-index: -1;
+}
+.ao-spill .ao-blob { bottom: 0; height: 100%; filter: none; }
+
+.ao-spark { flex: none; color: #6f6f75; }
+.ao-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ao-text);
+  font: inherit;
+  font-size: 17px;
+}
+.ao-input::placeholder { color: #67676d; }
+.ao-send {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #252527;
+  color: #cfcfd4;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.1s;
+}
+.ao-send:disabled { cursor: default; }
+.ao-send[data-ready='true'] { background: #fff; color: #111; }
+.ao-send[data-ready='true']:active { transform: scale(0.94); }
+.ao-send:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+.ao-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ao-bar, .ao-blob, .ao-dots i { animation: none; }
+}
