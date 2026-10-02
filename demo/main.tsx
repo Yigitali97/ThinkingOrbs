@@ -33,11 +33,13 @@ import {
 import { reelFrames, Scene, SCENE_FOCUS, sceneImage } from './samples';
 import { Playground } from './playground/Playground';
 import { VoiceAssistant } from './voice-assistant/VoiceAssistant';
+import { ChatApp } from './chat-app/ChatApp';
 import './demo.css';
 
 const SECTIONS = [
   { id: 'playground', name: 'Playground' },
   { id: 'voice-assistant', name: 'Voice assistant' },
+  { id: 'chat-app', name: 'Chat app' },
   { id: 'status', name: 'StatusOrb' },
   { id: 'gaze', name: 'GazeOrb' },
   { id: 'mascot', name: 'MascotOrb' },
@@ -689,6 +691,15 @@ function App() {
         code={`// demo/voice-assistant/ — copy the folder, then plug in your model:\n<VoiceAssistant respond={(text, signal) => callYourModel(text, { signal })} />`}
       >
         <VoiceAssistant />
+      </Section>
+
+      <Section
+        id="chat-app"
+        name="Chat app sample"
+        blurb="A chat where each orb has one job: SearchOrb for web search, ToolOrb for tool calls, ReasoningOrb for thinking, IngestOrb, VisionOrb and ReelOrb for files, images and video, VoiceOrb for dictation, and a TokenOrb on every reply. Use the hints under the message box to try each one."
+        code={`// demo/chat-app/ — copy the folder, then map your model's stream onto the agent events:\n<ChatApp agent={async (input, emit, signal) => {\n  emit({ type: 'search', phase: 'searching', sources: [] });                  // SearchOrb\n  emit({ type: 'tool', id: 'calc', label: 'calculator', status: 'running' }); // ToolOrb\n  emit({ type: 'thinking', label: 'Planning', budget: 0.2 });                // ReasoningOrb\n  emit({ type: 'text', delta: 'Hello' });                                    // TokenOrb\n}} />`}
+      >
+        <ChatApp />
       </Section>
 
       <Section

@@ -468,6 +468,40 @@ Two parts of the demo are useful on their own:
 
   Speech recognition works in Chrome, Edge and Safari; in other browsers the sample still answers typed messages aloud.
 
+- **Chat app sample** (`demo/chat-app/`) — a chat where each orb has one job and appears only while it's doing it.
+
+  - **Live activity row.** A single orb slot cross-fades between whichever orb matches the current work — ReasoningOrb, SearchOrb, ToolOrb, IngestOrb, VisionOrb or ReelOrb — next to a status line ("Ranking sources", "8 sources found · 4s"), tinted in that activity's colour.
+  - **Summary.** When the answer starts, the row folds into one sentence ("Searched 8 sources", "Looked at sunset.png and thought for 4s") that expands into a timeline: reasoning steps, sources, tools with durations, frames.
+  - **Results as real content.** The actual image with its scan and pinned points, the video's frames with the one being watched highlighted, a file card.
+  - **Answer.** Streamed text with a TokenOrb riding at the end like a caret.
+  - **Around it.** A MascotOrb avatar and a StatusOrb for the current activity in the header, a VoiceOrb in the composer while dictating, and suggestions under the message box (the file, image and video ones use built-in samples).
+
+  The demo agent does real maths, budgets, file statistics and image/video colour analysis; its web search results are labelled as demo data. Connect your model by emitting events:
+
+  ```tsx
+  <ChatApp
+    agent={async ({ text, attachments }, emit, signal) => {
+      emit({ type: 'thinking', label: 'Planning', budget: 0.2 });                   // ReasoningOrb
+      emit({ type: 'search', phase: 'searching', sources: [] });                     // SearchOrb
+      emit({ type: 'tool', id: 'calc', label: 'calculator', status: 'running' });   // ToolOrb
+      emit({ type: 'ingest', name: 'report.pdf', progress: 1, status: 'reading' }); // IngestOrb
+      emit({ type: 'vision', name: 'photo.png', status: 'scanning', src: url });    // VisionOrb
+      emit({ type: 'reel', name: 'clip.mp4', frames, progress: 0.5, status: 'analyzing' }); // ReelOrb
+      emit({ type: 'text', delta: 'Here is what I found…' });                       // TokenOrb
+    }}
+  />
+  ```
+
+  How it's built:
+
+  | File | Job |
+  |---|---|
+  | `agent.ts` | the event protocol and the demo agent |
+  | `activity.ts` | a pure reducer: events → an ordered activity timeline, plus the live labels and summary sentence (unit-tested in `activity.test.ts`) |
+  | `useChat.ts` | messages, uploads, send and stop |
+  | `ActivityRow.tsx`, `ActivitySummary.tsx`, `Results.tsx`, `Answer.tsx`, `Composer.tsx` | one piece of the reply or the composer each |
+  | `motion.tsx` | `Collapse` (height-animated, unmounts when closed) and `Swap` (cross-fade that keeps the outgoing orb alive) |
+
 ```bash
 npm install
 ```
@@ -483,6 +517,7 @@ Then open http://localhost:5318.
 | `npm run dev` | demo page with hot reload |
 | `npm run build` | strict type-check, then a production build of the demo |
 | `npm run typecheck` | type-check only |
+| `npm test` | unit tests (the chat sample's activity reducer) |
 
 The demo's sample images and video frames are drawn in code (`demo/samples.ts`), so it works offline.
 
@@ -510,6 +545,7 @@ src/orbs/
 demo/               the demo page (main.tsx, demo.css, samples.ts)
   playground/       the Playground
   voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
+  chat-app/         the chat app sample (agent protocol + demo agent, UI)
 ```
 
 Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
