@@ -1,9 +1,9 @@
 /*
- * Watching Orb engine — a ball whose eyes live on its surface and turn
+ * Gaze Orb engine — a ball whose eyes live on its surface and turn
  * toward the pointer in 3D, with occasional blinks. Framework-free.
  */
 
-export interface WatchingOrbOptions {
+export interface GazeOrbOptions {
   /** CSS pixel width/height of the canvas. */
   size?: number;
   ballColor?: string;
@@ -14,8 +14,8 @@ export interface WatchingOrbOptions {
   blinking?: boolean;
 }
 
-export interface WatchingOrbHandle {
-  update(opts: WatchingOrbOptions): void;
+export interface GazeOrbHandle {
+  update(opts: GazeOrbOptions): void;
   /** Blink now. */
   blink(): void;
   destroy(): void;
@@ -71,9 +71,9 @@ function blinkOpenness(elapsed: number): number {
   return 1;
 }
 
-export function createWatchingOrb(canvas: HTMLCanvasElement, opts: WatchingOrbOptions = {}): WatchingOrbHandle {
+export function createGazeOrb(canvas: HTMLCanvasElement, opts: GazeOrbOptions = {}): GazeOrbHandle {
   const maybeCtx = canvas.getContext('2d');
-  if (!maybeCtx) throw new Error('WatchingOrb: 2D canvas context unavailable');
+  if (!maybeCtx) throw new Error('GazeOrb: 2D canvas context unavailable');
   const ctx: CanvasRenderingContext2D = maybeCtx;
 
   const o = {

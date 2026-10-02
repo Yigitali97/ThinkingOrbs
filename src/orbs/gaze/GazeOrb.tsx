@@ -1,9 +1,9 @@
 'use client';
 
 import { CSSProperties, forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { createWatchingOrb, WatchingOrbHandle } from './engine';
+import { createGazeOrb, GazeOrbHandle } from './engine';
 
-export interface WatchingOrbProps {
+export interface GazeOrbProps {
   /** Width and height in CSS pixels. */
   size?: number;
   ballColor?: string;
@@ -18,12 +18,12 @@ export interface WatchingOrbProps {
   style?: CSSProperties;
 }
 
-export interface WatchingOrbRef {
+export interface GazeOrbRef {
   /** Trigger a blink right now. */
   blink(): void;
 }
 
-export const WatchingOrb = forwardRef<WatchingOrbRef, WatchingOrbProps>(function WatchingOrb(
+export const GazeOrb = forwardRef<GazeOrbRef, GazeOrbProps>(function GazeOrb(
   {
     size = 240,
     ballColor = '#f2f2f2',
@@ -37,12 +37,12 @@ export const WatchingOrb = forwardRef<WatchingOrbRef, WatchingOrbProps>(function
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const orbRef = useRef<WatchingOrbHandle | null>(null);
+  const orbRef = useRef<GazeOrbHandle | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const orb = createWatchingOrb(canvas, { size, ballColor, eyeColor, outlineColor, blinking });
+    const orb = createGazeOrb(canvas, { size, ballColor, eyeColor, outlineColor, blinking });
     orbRef.current = orb;
     return () => {
       orb.destroy();
@@ -69,4 +69,4 @@ export const WatchingOrb = forwardRef<WatchingOrbRef, WatchingOrbProps>(function
   );
 });
 
-export default WatchingOrb;
+export default GazeOrb;

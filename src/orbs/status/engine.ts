@@ -1,10 +1,10 @@
 /*
- * Thinking Orbs engine — framework-free canvas renderer for animated
+ * Status Orb engine — framework-free canvas renderer for animated
  * dot-sphere status indicators. All orbs share one requestAnimationFrame loop
  * and orbs scrolled out of view are skipped.
  */
 
-export const ORB_VARIANTS = [
+export const STATUS_VARIANTS = [
   'base',
   'working',
   'working · gyro',
@@ -22,10 +22,10 @@ export const ORB_VARIANTS = [
   'waiting',
 ] as const;
 
-export type OrbVariant = (typeof ORB_VARIANTS)[number];
+export type StatusVariant = (typeof STATUS_VARIANTS)[number];
 
-export interface OrbOptions {
-  variant?: OrbVariant;
+export interface StatusOrbOptions {
+  variant?: StatusVariant;
   /** CSS pixel width/height of the canvas. */
   size?: number;
   /** Dot color, any canvas fillStyle. */
@@ -34,8 +34,8 @@ export interface OrbOptions {
   paused?: boolean;
 }
 
-export interface OrbHandle {
-  setVariant(variant: OrbVariant): void;
+export interface StatusOrbHandle {
+  setVariant(variant: StatusVariant): void;
   setSize(size: number): void;
   setColor(color: string): void;
   setPaused(paused: boolean): void;
@@ -168,7 +168,7 @@ function compactState(t: number): { scale: number; wallX: number | null } {
 
 // ------------------------------------------------------------------ variants
 
-const VARIANTS: Record<OrbVariant, VariantDef> = {
+const VARIANTS: Record<StatusVariant, VariantDef> = {
   base: {
     points: () => fibonacciSphere(DOTS),
     frame: (t) => ({ rot: t * BASE_SPEED }),
@@ -289,9 +289,9 @@ class Orb {
   private sb = new Float32Array(0);
   private order = new Uint16Array(0);
 
-  constructor(canvas: HTMLCanvasElement, opts: OrbOptions) {
+  constructor(canvas: HTMLCanvasElement, opts: StatusOrbOptions) {
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('ThinkingOrbs: 2D canvas context unavailable');
+    if (!ctx) throw new Error('StatusOrb: 2D canvas context unavailable');
     this.canvas = canvas;
     this.ctx = ctx;
     if (opts.size) this.size = opts.size;
@@ -309,9 +309,9 @@ class Orb {
     this.canvas.style.height = this.size + 'px';
   }
 
-  setVariant(name: OrbVariant) {
+  setVariant(name: StatusVariant) {
     const v = VARIANTS[name];
-    if (!v) throw new Error('ThinkingOrbs: unknown variant ' + name);
+    if (!v) throw new Error('StatusOrb: unknown variant ' + name);
     this.variant = v;
     const pts = v.points();
     const n = pts.length;
@@ -472,7 +472,7 @@ function getObserver(): IntersectionObserver | null {
 }
 
 /** Mount an orb onto a canvas. Call `destroy()` when done. */
-export function createOrb(canvas: HTMLCanvasElement, opts: OrbOptions = {}): OrbHandle {
+export function createStatusOrb(canvas: HTMLCanvasElement, opts: StatusOrbOptions = {}): StatusOrbHandle {
   const orb = new Orb(canvas, opts);
   const still = prefersReducedMotion();
   orb.draw(STILL_FRAME_TIME);

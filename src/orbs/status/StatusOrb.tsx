@@ -1,11 +1,11 @@
 'use client';
 
 import { CSSProperties, useEffect, useRef } from 'react';
-import { createOrb, OrbHandle, OrbVariant } from './engine';
+import { createStatusOrb, StatusOrbHandle, StatusVariant } from './engine';
 
-export interface ThinkingOrbProps {
+export interface StatusOrbProps {
   /** Which animation to play. Can be changed at any time. */
-  variant?: OrbVariant;
+  variant?: StatusVariant;
   /** Width and height in CSS pixels. */
   size?: number;
   /** Dot color — any CSS color string. */
@@ -18,7 +18,7 @@ export interface ThinkingOrbProps {
   style?: CSSProperties;
 }
 
-export function ThinkingOrb({
+export function StatusOrb({
   variant = 'base',
   size = 72,
   color = '#ffffff',
@@ -26,15 +26,15 @@ export function ThinkingOrb({
   label,
   className,
   style,
-}: ThinkingOrbProps) {
+}: StatusOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const orbRef = useRef<OrbHandle | null>(null);
+  const orbRef = useRef<StatusOrbHandle | null>(null);
 
   // Mount once; later prop changes are pushed into the live orb below.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const orb = createOrb(canvas, { variant, size, color, paused });
+    const orb = createStatusOrb(canvas, { variant, size, color, paused });
     orbRef.current = orb;
     return () => {
       orb.destroy();
@@ -61,4 +61,4 @@ export function ThinkingOrb({
   );
 }
 
-export default ThinkingOrb;
+export default StatusOrb;
