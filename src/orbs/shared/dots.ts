@@ -27,6 +27,16 @@ export function sizeCanvas(canvas: HTMLCanvasElement, size: number, maxDpr = 2.5
   return dpr;
 }
 
+/** Size a non-square canvas; returns the device-pixel ratio used. */
+export function sizeCanvasRect(canvas: HTMLCanvasElement, width: number, height: number, maxDpr = 2.5) {
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  return dpr;
+}
+
 /** requestAnimationFrame loop with a clamped delta; returns a stop function. */
 export function loop(frame: (dt: number, t: number) => void) {
   let raf = 0;
@@ -59,7 +69,8 @@ export class DotSphere {
   readonly sp: Float32Array;
   /** per-dot highlight 0..1, written by the caller */
   readonly boost: Float32Array;
-  private order: Uint16Array;
+  /** dot indices sorted back to front after `project` */
+  readonly order: Uint16Array;
 
   constructor(n: number) {
     this.n = n;

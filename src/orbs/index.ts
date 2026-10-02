@@ -7,3 +7,8 @@ export * from './ask';
 export * from './assistant';
 export * from './token';
 export * from './tool';
+export * from './search';
+export * from './ingest';
+export * from './reasoning';
+export * from './vision';
+export * from './reel';

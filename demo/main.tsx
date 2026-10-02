@@ -1,23 +1,36 @@
-import { ReactNode, StrictMode, useEffect, useRef, useState } from 'react';
+import { ReactNode, StrictMode, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AskHandler,
+  captureFrames,
   AskOrb,
   GazeOrb,
   GazeOrbRef,
+  IngestOrb,
+  IngestStatus,
   ASSISTANT_COLORS,
   AssistantOrb,
   AssistantState,
   MascotOrb,
   MascotOrbRef,
+  ReasoningOrb,
+  ReasoningStep,
+  ReelOrb,
+  ReelStatus,
+  SearchOrb,
+  SearchPhase,
+  SearchSource,
   STATUS_VARIANTS,
   StatusOrb,
   TokenOrb,
   ToolCall,
   ToolOrb,
   useMicrophone,
+  VisionOrb,
+  VisionStatus,
   VoiceOrb,
 } from '../src/orbs';
+import { reelFrames, Scene, SCENE_FOCUS, sceneImage } from './samples';
 import './demo.css';
 
 const SECTIONS = [
@@ -28,6 +41,11 @@ const SECTIONS = [
   { id: 'assistant', name: 'AssistantOrb' },
   { id: 'token', name: 'TokenOrb' },
   { id: 'tool', name: 'ToolOrb' },
+  { id: 'search', name: 'SearchOrb' },
+  { id: 'ingest', name: 'IngestOrb' },
+  { id: 'reasoning', name: 'ReasoningOrb' },
+  { id: 'vision', name: 'VisionOrb' },
+  { id: 'reel', name: 'ReelOrb' },
   { id: 'ask', name: 'AskOrb' },
 ];
 
@@ -293,6 +311,316 @@ function ToolDemo() {
   );
 }
 
+// ------------------------------------------------------------------ SearchOrb
+
+const FOUND: SearchSource[] = [
+  { id: '1', domain: 'wikipedia.org', score: 0.9 },
+  { id: '2', domain: 'reuters.com', score: 0.7 },
+  { id: '3', domain: 'arxiv.org', score: 0.95 },
+  { id: '4', domain: 'github.com', score: 0.5 },
+  { id: '5', domain: 'nature.com', score: 0.85 },
+  { id: '6', domain: 'bbc.co.uk', score: 0.4 },
+  { id: '7', domain: 'stackoverflow.com', score: 0.6 },
+  { id: '8', domain: 'mit.edu', score: 0.75 },
+  { id: '9', domain: 'who.int', score: 0.3 },
+  { id: '10', domain: 'nytimes.com', score: 0.55 },
+];
+
+function SearchDemo() {
+  const [phase, setPhase] = useState<SearchPhase>('idle');
+  const [sources, setSources] = useState<SearchSource[]>([]);
+  const [run, setRun] = useState<{ n: number; empty: boolean }>({ n: 0, empty: false });
+
+  useEffect(() => {
+    setSources([]);
+    setPhase('searching');
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+    if (run.empty) {
+      at(2400, () => setPhase('empty'));
+    } else {
+      let ms = 500;
+      FOUND.forEach((src) => {
+        ms += 220 + Math.random() * 260;
+        at(ms, () => setSources((list) => [...list, src]));
+      });
+      at(ms + 900, () => setPhase('ranking'));
+      at(ms + 2500, () => setPhase('synthesizing'));
+      at(ms + 5000, () => setPhase('done'));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [run]);
+
+  return (
+    <div className="panel panel-center">
+      <SearchOrb phase={phase} sources={sources} size={300} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, empty: false }))}>
+          Search again
+        </button>
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, empty: true }))}>
+          Search with no results
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ IngestOrb
+
+const SAMPLE_FILES = ['report.pdf', 'photo.png', 'walkthrough.mp4', 'call.mp3'];
+
+function IngestDemo() {
+  const [name, setName] = useState(SAMPLE_FILES[0]);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<IngestStatus>('uploading');
+  const [run, setRun] = useState<{ n: number; fail: boolean }>({ n: 0, fail: false });
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setProgress(0);
+    setStatus('uploading');
+    let p = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const step = () => {
+      // uneven chunks, like a real network
+      p = Math.min(1, p + 0.03 + Math.random() * 0.07);
+      if (run.fail && p > 0.55) return setStatus('error');
+      setProgress(p);
+      if (p < 1) timer = setTimeout(step, 90 + Math.random() * 160);
+      else {
+        setStatus('reading');
+        timer = setTimeout(() => setStatus('done'), 1800);
+      }
+    };
+    timer = setTimeout(step, 400);
+    return () => clearTimeout(timer);
+  }, [name, run]);
+
+  return (
+    <div className="panel panel-center">
+      <div className="segmented" role="radiogroup" aria-label="Sample file">
+        {SAMPLE_FILES.map((f) => (
+          <button key={f} role="radio" aria-checked={name === f} onClick={() => setName(f)}>
+            {f}
+          </button>
+        ))}
+      </div>
+      <IngestOrb name={name} progress={progress} status={status} width={380} height={220} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, fail: false }))}>
+          Upload again
+        </button>
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, fail: true }))}>
+          Simulate failure
+        </button>
+        <button className="btn" onClick={() => fileRef.current?.click()}>
+          Choose a file…
+        </button>
+        <input
+            ref={fileRef}
+            type="file"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                setName(f.name);
+                setRun((r) => ({ n: r.n + 1, fail: false }));
+              }
+              e.target.value = '';
+            }}
+          />
+      </div>
+      <div className="hint">Picking a file only uses its name to choose the card type — nothing is uploaded.</div>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------- ReasoningOrb
+
+const THOUGHTS = [
+  'Reading the question',
+  'Recalling fleet data',
+  'Comparing fuel costs',
+  'Checking service dates',
+  'Estimating savings',
+  'Double-checking the maths',
+  'Weighing two options',
+  'Looking for edge cases',
+  'Re-reading the constraints',
+  'Simplifying the plan',
+  'Drafting the answer',
+  'Polishing the wording',
+];
+
+function ReasoningDemo() {
+  const [steps, setSteps] = useState<ReasoningStep[]>([]);
+  const [thinking, setThinking] = useState(true);
+  const [budget, setBudget] = useState(0);
+  const [run, setRun] = useState<{ n: number; long: boolean }>({ n: 0, long: false });
+
+  useEffect(() => {
+    const total = run.long ? 12 : 7;
+    const finalBudget = run.long ? 0.94 : 0.62;
+    setSteps([]);
+    setThinking(true);
+    setBudget(0);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let ms = 300;
+    for (let k = 0; k < total; k++) {
+      ms += 650 + Math.random() * 500;
+      const label = run.long ? THOUGHTS[k] : THOUGHTS[[0, 1, 2, 3, 4, 5, 10][k]];
+      timers.push(
+        setTimeout(() => {
+          setSteps((list) => [...list, { id: `${run.n}-${k}`, label }]);
+          setBudget(((k + 1) / total) * finalBudget);
+        }, ms)
+      );
+    }
+    timers.push(setTimeout(() => setThinking(false), ms + 1200));
+    return () => timers.forEach(clearTimeout);
+  }, [run]);
+
+  return (
+    <div className="panel panel-center">
+      <ReasoningOrb steps={steps} thinking={thinking} budget={budget} size={300} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, long: false }))}>
+          Reason again
+        </button>
+        <button className="btn" onClick={() => setRun((r) => ({ n: r.n + 1, long: true }))}>
+          Long run (near budget)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ VisionOrb
+
+function VisionDemo() {
+  const scenes = useMemo(() => ({ sunset: sceneImage('sunset'), lake: sceneImage('lake') }), []);
+  const [scene, setScene] = useState<Scene | 'custom'>('sunset');
+  const [custom, setCustom] = useState<string | null>(null);
+  const [status, setStatus] = useState<VisionStatus>('loading');
+  const [run, setRun] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const src = scene === 'custom' ? custom : scenes[scene];
+
+  useEffect(() => {
+    setStatus('loading');
+    const a = setTimeout(() => setStatus('scanning'), 600);
+    const b = setTimeout(() => setStatus('done'), 600 + 3400);
+    return () => {
+      clearTimeout(a);
+      clearTimeout(b);
+    };
+  }, [src, run]);
+  useEffect(() => () => void (custom && URL.revokeObjectURL(custom)), [custom]);
+
+  return (
+    <div className="panel panel-center">
+      <div className="segmented" role="radiogroup" aria-label="Sample image">
+        {(['sunset', 'lake'] as Scene[]).map((sc) => (
+          <button key={sc} role="radio" aria-checked={scene === sc} onClick={() => setScene(sc)}>
+            {sc === 'sunset' ? 'Sunset' : 'Lake at night'}
+          </button>
+        ))}
+        {custom && (
+          <button role="radio" aria-checked={scene === 'custom'} onClick={() => setScene('custom')}>
+            Your image
+          </button>
+        )}
+      </div>
+      <VisionOrb src={src} status={status} focus={scene === 'custom' ? [] : SCENE_FOCUS[scene]} size={320} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => r + 1)}>
+          Scan again
+        </button>
+        <button className="btn" onClick={() => fileRef.current?.click()}>
+          Choose an image…
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) {
+              setCustom(URL.createObjectURL(f));
+              setScene('custom');
+            }
+            e.target.value = '';
+          }}
+        />
+      </div>
+      <div className="hint">Your image stays in the browser — it is never uploaded.</div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- ReelOrb
+
+function ReelDemo() {
+  const sample = useMemo(() => reelFrames(12), []);
+  const [frames, setFrames] = useState<string[]>(sample);
+  const [status, setStatus] = useState<ReelStatus>('loading');
+  const [progress, setProgress] = useState(0);
+  const [run, setRun] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setStatus('loading');
+    setProgress(0);
+    let p = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const step = () => {
+      p = Math.min(1, p + 0.012 + Math.random() * 0.01);
+      setProgress(p);
+      if (p < 1) timer = setTimeout(step, 70);
+      else timer = setTimeout(() => setStatus('done'), 300);
+    };
+    timer = setTimeout(() => {
+      setStatus('analyzing');
+      step();
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [frames, run]);
+
+  return (
+    <div className="panel panel-center">
+      <ReelOrb frames={frames} progress={progress} status={status} width={460} height={270} />
+      <div className="actions">
+        <button className="btn" onClick={() => setRun((r) => r + 1)}>
+          Watch again
+        </button>
+        <button className="btn" onClick={() => fileRef.current?.click()}>
+          Choose a video…
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*"
+          hidden
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            setStatus('loading');
+            try {
+              setFrames(await captureFrames(f, 12));
+            } catch {
+              setStatus('error');
+            }
+          }}
+        />
+      </div>
+      <div className="hint">Frames from your video are captured in the browser with captureFrames() — nothing is uploaded.</div>
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------- AskOrb
 
 const failingAgent: AskHandler = async (_q, report, signal) => {
@@ -330,7 +658,7 @@ function App() {
       <header className="hero">
         <StatusOrb variant="reasoning · twins" size={44} label={null} />
         <h1>Orbs</h1>
-        <p>Animated presence for AI interfaces — eight React components, no dependencies beyond React.</p>
+        <p>Animated presence for AI interfaces — thirteen React components, no dependencies beyond React.</p>
         <nav className="nav">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`}>
@@ -404,6 +732,51 @@ function App() {
       </Section>
 
       <Section
+        id="search"
+        name="SearchOrb"
+        blurb="For AI search. Each source flies in and joins the orbit; ranking pulls the best ones closer; synthesis absorbs them into the core, best first."
+        code={`<SearchOrb phase="searching" sources={[{ id: '1', domain: 'arxiv.org', score: 0.9 }]} />\n// idle · searching · ranking · synthesizing · done · empty`}
+      >
+        <SearchDemo />
+      </Section>
+
+      <Section
+        id="ingest"
+        name="IngestOrb"
+        blurb="For file, image, video and audio uploads. The file card breaks into dots that arc into the sphere as real progress rises, then the sphere reads it."
+        code={`<IngestOrb name="report.pdf" progress={0.42} status="uploading" />\n// uploading · reading · done · error — the card type comes from the file name`}
+      >
+        <IngestDemo />
+      </Section>
+
+      <Section
+        id="reasoning"
+        name="ReasoningOrb"
+        blurb="For deep reasoning. Each step adds a node that links to the last one and its nearest earlier thought; the outer arc shows how much of the thinking budget is used."
+        code={`<ReasoningOrb steps={[{ id: '1', label: 'Comparing fuel costs' }]} thinking budget={0.4} />`}
+      >
+        <ReasoningDemo />
+      </Section>
+
+      <Section
+        id="vision"
+        name="VisionOrb"
+        blurb="For image understanding. The picture is seen through a turning dot sphere; a scan line reveals its colours, then detected things pulse with labels."
+        code={`<VisionOrb src={imageUrl} status="scanning" focus={[{ x: 0.66, y: 0.38, label: 'sun' }]} />\n// loading · scanning · done · error`}
+      >
+        <VisionDemo />
+      </Section>
+
+      <Section
+        id="reel"
+        name="ReelOrb"
+        blurb="For video understanding. Frames orbit like a film strip; the one being watched swings to the front and beams into the core."
+        code={`const frames = await captureFrames(videoFile, 12);\n<ReelOrb frames={frames} progress={0.4} status="analyzing" />`}
+      >
+        <ReelDemo />
+      </Section>
+
+      <Section
         id="ask"
         name="AskOrb"
         blurb="The whole flow: prompt bar → thinking orb with live stages → answer card. Drive the stages from your agent."
@@ -413,7 +786,7 @@ function App() {
       </Section>
 
       <footer className="footer">
-        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, TokenOrb, ToolOrb, AskOrb } from './orbs';`}</code>
+        <code>{`import { StatusOrb, GazeOrb, MascotOrb, VoiceOrb, AssistantOrb, TokenOrb, ToolOrb, SearchOrb, IngestOrb, ReasoningOrb, VisionOrb, ReelOrb, AskOrb } from './orbs';`}</code>
       </footer>
     </div>
   );
