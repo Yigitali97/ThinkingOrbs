@@ -2,6 +2,8 @@
 
 Date: 2026-10-03 · Status: draft for review · Branch: `ai-sites`
 
+> **Scope update (2026-10-03):** build **Hermes only** for now. The Fleet site (§3) is deferred. The shared assistant shell (§2) stays site-agnostic so Fleet can be added later as a second agent. Fleet-only requirements (success criterion 3, §3, the Fleet rows in §8) do not apply to this round.
+
 ## 1. Intent
 
 Most websites are pages first, with a chatbot bolted on. These two sites are the other way round: an AI assistant is always present on every page, keeps its conversation as you move around, knows what page you are looking at, and answers in whatever form fits the question — a sentence, a table, a chart, a status card, a draft message, or a spoken reply.
