@@ -915,6 +915,7 @@ test('opening Hermes never asks for the microphone; pressing Dictate does', asyn
     expect(await asked(), `microphone requested on load of ${path}`).toBe(0);
   }
 
+  await page.goto('/hermes'); // on a phone a dashboard sheet covers the message box, so press Dictate with no canvas open
   const dictate = page.getByRole('button', { name: 'Dictate' });
   test.skip((await dictate.count()) === 0, 'this browser has no speech recognition, so there is no Dictate button');
   await dictate.first().click();
