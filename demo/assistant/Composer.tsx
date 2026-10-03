@@ -133,7 +133,8 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
             </svg>
           </button>
         ) : (
-          <button type="submit" className="as-send" disabled={!canSend} aria-label="Send" title="Send">
+          // aria-disabled, not disabled: this is the same node as Stop, and a disabled button would drop the focus Stop had
+          <button type="submit" className="as-send" aria-disabled={!canSend} aria-label="Send" title="Send">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 19V5M6 11l6-6 6 6" />
             </svg>

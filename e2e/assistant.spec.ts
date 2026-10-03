@@ -150,3 +150,25 @@ test('on a phone the panel is a modal sheet that fits the screen', async ({ page
   for (let i = 0; i < 25; i++) await page.keyboard.press('Tab');
   expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
 });
+
+test('pressing Stop from the keyboard keeps focus in the panel', async ({ page, isMobile }) => {
+  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  await ask(page, 'How is the team doing?');
+  const stop = panel(page).getByRole('button', { name: 'Stop' });
+  await expect(stop).toBeVisible();
+  // from the composer, Tab past the dictation button (when the browser has one) to Stop
+  while (!(await stop.evaluate((el) => el === document.activeElement))) await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(panel(page).locator('[data-turn]').first().getByText('Stopped.')).toBeVisible();
+  const inPanel = () => page.evaluate(() => !!document.activeElement?.closest('aside, [role="dialog"]'));
+  expect(await inPanel()).toBe(true);
+  await expect(panel(page).getByRole('button', { name: 'Send' })).toBeFocused();
+  if (isMobile) {
+    await page.keyboard.press('Tab');
+    expect(await inPanel(), 'Tab stays inside the modal sheet').toBe(true);
+  } else {
+    // the side panel isn't modal and Send is the last control on the page, so step back into it instead
+    await page.keyboard.press('Shift+Tab');
+    expect(await inPanel()).toBe(true);
+  }
+});
