@@ -2,13 +2,13 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { setDown } from '../../assistant/flaky';
-import type { AgentDefinition, Block, PageContext, User } from '../../assistant/protocol';
-import { runBrain } from '../../assistant/testing';
+import type { AgentDefinition, Block, PageContext, ToolResult, User } from '../../assistant/protocol';
+import { runBrain, runBrief } from '../../assistant/testing';
 import { HERMES_SEED } from '../config';
 import { generateCompany } from '../data/generate';
 import type { Company } from '../data/types';
 import { createHermesPolicy } from '../policy';
-import { hermesAgent } from './definition';
+import { hermesAgent, hermesSuggestions } from './definition';
 import { HERMES_INTENTS, projectIn, unknownProjectName } from './intents';
 import { hermesTools } from './tools';
 
@@ -16,6 +16,15 @@ const NOW = new Date('2026-10-07T15:00:00'); // Wednesday
 const MONDAY_EARLY = new Date('2026-10-05T00:30:00');
 const DEVELOPER_COPY = "Individual hours for other people are visible to managers. Here's your team's total instead.";
 const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
+
+const MAYA_BRIEF =
+  'This week Platform and Product logged 239 h, 98% of the 244.2 h capacity so far. 3 PRs merged since Monday. ' +
+  'Atlas is at risk: 3 blocked tickets; Comet is off track: projected to finish 2 weeks after the target date.';
+const DANIEL_BRIEF =
+  'This week the Platform team logged 123 h, 97% of the 126.5 h capacity so far. 2 PRs merged since Monday. ' +
+  'Atlas is at risk: 3 blocked tickets; Comet is off track: projected to finish 2 weeks after the target date.';
+const SARA_BRIEF =
+  'This week the Platform team logged 123 h, 97% of the 126.5 h capacity so far. 2 PRs merged since Monday. Atlas is at risk: 3 blocked tickets.';
 
 const c = generateCompany(HERMES_SEED, NOW);
 const defFor = (co: Company): AgentDefinition => ({ ...hermesAgent, tools: hermesTools(() => co), policy: createHermesPolicy(() => co) });
@@ -39,6 +48,7 @@ const ATLAS_PAGE: PageContext = { page: 'project', id: 'atlas', title: 'Atlas' }
 
 afterEach(() => {
   setDown('Jira', false);
+  setDown('Clockify', false);
 });
 
 describe('project names', () => {
@@ -69,7 +79,7 @@ describe('project names', () => {
 
   it('lists the intents in the documented order', () => {
     expect(HERMES_INTENTS.map((i) => i.id)).toEqual([
-      'this-project', 'my-tickets', 'person-hours', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
+      'open-dashboard', 'this-project', 'my-tickets', 'person-hours', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
       'meeting-decisions', 'channel-summary', 'aws-costs', 'status-draft',
     ]);
   });
@@ -137,8 +147,7 @@ describe("Sara never receives what she can't see", () => {
     ['Write a status update for Beacon'],
   ];
 
-  it.each(QUESTIONS)('%s', async (q, page) => {
-    const r = await ask(q, SARA, { page });
+  const noLeak = (r: { received: ToolResult[] }) => {
     for (const res of r.received) {
       if (!res.ok) continue;
       const data = res.data as Record<string, unknown> | Record<string, unknown>[];
@@ -156,7 +165,11 @@ describe("Sara never receives what she can't see", () => {
     expect(json).not.toContain('NaN');
     expect(json).not.toContain('Infinity');
     expect(json).not.toMatch(/BCN-|CMT-/);
-  });
+  };
+
+  it.each(QUESTIONS)('%s', async (q, page) => noLeak(await ask(q, SARA, { page })));
+  it('the morning brief', async () => noLeak(await runBrief(def, { now: NOW, user: SARA })));
+  it.each([['Open Beacon'], ['Show me the team dashboard'], ['Open Comet']])('%s', async (q) => noLeak(await ask(q, SARA)));
 });
 
 describe("Daniel never receives a Product person's hours", () => {
@@ -175,15 +188,17 @@ describe("Daniel never receives a Product person's hours", () => {
     'Write a status update for Beacon',
   ];
 
-  it.each(QUESTIONS)('%s', async (q) => {
-    const r = await ask(q, DANIEL);
+  const noProductHours = (q: string, r: { received: ToolResult[] }) => {
     for (const res of r.received) {
       if (!res.ok) continue;
       const data = res.data as { entries?: { personId: string }[] };
       if (Array.isArray(data) || !Array.isArray(data.entries)) continue;
       for (const e of data.entries) expect(PRODUCT.has(e.personId), `${q}: ${e.personId}`).toBe(false);
     }
-  });
+  };
+
+  it.each(QUESTIONS)('%s', async (q) => noProductHours(q, await ask(q, DANIEL)));
+  it('the morning brief', async () => noProductHours('brief', await runBrief(def, { now: NOW, user: DANIEL })));
 });
 
 describe("one person's hours", () => {
@@ -445,6 +460,100 @@ describe('team health and the status draft', () => {
   });
 });
 
+describe('opening a dashboard', () => {
+  it.each([
+    ['Show me the team dashboard', "Here's the Team dashboard.", '/hermes/team'],
+    ['Open the team', "Here's the Team dashboard.", '/hermes/team'],
+    ['Take me to the projects', "Here's the Projects dashboard.", '/hermes/projects'],
+    ['Go to connections', "Here's the Connections page.", '/hermes/connections'],
+    ['Open the integrations page', "Here's the Connections page.", '/hermes/connections'],
+    ['Open Atlas', "Here's the Atlas project.", '/hermes/projects/atlas'],
+    ['show me the Delta project', "Here's the Delta project.", '/hermes/projects/delta'],
+  ])('%s', async (q, text, href) => {
+    const r = await ask(q, MAYA);
+    expect(r.text).toBe(text);
+    expect(r.opens).toEqual([href]);
+    expect(r.blocks).toEqual([]);
+  });
+
+  it('refuses a project the user cannot see, and opens nothing', async () => {
+    const r = await ask('Open Beacon', SARA);
+    expect(r.text).toContain("Beacon isn't one of the projects you can see. Your projects: Atlas, Delta.");
+    expect(r.opens).toEqual([]);
+  });
+
+  it('opens nothing when the directory is down', async () => {
+    setDown('Directory', true);
+    try {
+      const r = await ask('Open Atlas', MAYA);
+      expect(r.opens).toEqual([]);
+    } finally {
+      setDown('Directory', false);
+    }
+  });
+
+  it.each([
+    ['How is the team doing?', 'stat'],
+    ['How are the projects going?', 'status'],
+    ['Write a status update for Atlas', 'draft'],
+    ["What's blocking Atlas?", 'table'],
+    ['Show me the team hours this week', 'stat'],
+    ["Show me Leo's timesheet", 'stat'],
+  ] as const)('leaves "%s" to its own intent', async (q, kind) => {
+    const r = await ask(q, MAYA);
+    expect(r.opens).toEqual([]);
+    expect(ofKind(r.blocks, kind).length, q).toBeGreaterThan(0);
+  });
+});
+
+describe('the morning brief', () => {
+  it('tells Maya the hours, the merged PRs and the projects at risk', async () => {
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).toBe(MAYA_BRIEF);
+    expect(r.text).toContain('PRs merged');
+    expect(r.text).toContain('Atlas');
+    expect(r.blocks).toEqual([]);
+    expect(r.text).not.toContain('Sources');
+  });
+
+  it('gives Daniel his own team and Sara hers, as totals only', async () => {
+    expect((await runBrief(def, { now: NOW, user: DANIEL })).text).toBe(DANIEL_BRIEF);
+    const sara = await runBrief(def, { now: NOW, user: SARA });
+    expect(sara.text).toBe(SARA_BRIEF);
+    expect(sara.text).toContain('Platform');
+    for (const p of c.people) if (p.id !== 'p-sara') expect(sara.text).not.toContain(p.name);
+  });
+
+  it('is not a number soup at Monday 00:30', async () => {
+    const r = await runBrief(def, { now: MONDAY_EARLY, user: MAYA });
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(r.text).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('skips the projects sentence when Jira is down', async () => {
+    setDown('Jira', true);
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).toContain('PRs merged');
+    expect(r.text).not.toMatch(/Atlas|on track|at risk|off track/);
+  });
+
+  it('skips the hours sentence when Clockify is down', async () => {
+    setDown('Clockify', true);
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).not.toContain('logged');
+    expect(r.text).toContain('PRs merged');
+  });
+
+  it('is empty-handed without a signed-in user', async () => {
+    const r = await runBrief(def, { now: NOW });
+    expect(r.text).toBe('');
+  });
+
+  it('is exposed as the agent brief', () => {
+    expect(hermesAgent.brief).toBeTypeOf('function');
+  });
+});
+
 describe('the brain runner', () => {
   it('says it is not sure and calls no tools', async () => {
     const r = await ask('Tell me a joke', MAYA);
@@ -470,6 +579,33 @@ describe('the brain runner', () => {
     expect(r.activities.some((a) => a.kind === 'image')).toBe(true);
     expect(r.text).toContain("I've read board.png (4.0 KB).");
     expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+  });
+});
+
+describe('suggestions', () => {
+  const KINDS: PageContext[] = [
+    { page: 'home', title: 'Home' },
+    { page: 'team', title: 'Team' },
+    { page: 'projects', title: 'Projects' },
+    ATLAS_PAGE,
+    { page: 'connections', title: 'Connections' },
+  ];
+
+  it('returns exactly three for every page kind and role', () => {
+    for (const page of KINDS) for (const user of [MAYA, DANIEL, SARA]) expect(hermesSuggestions(page, user), `${user.id} ${page.page}`).toHaveLength(3);
+  });
+
+  it.each([[MAYA], [DANIEL], [SARA]])('offers the team dashboard on Home to %#', (user) => {
+    expect(hermesSuggestions(KINDS[0], user)).toContain('Show me the team dashboard');
+  });
+
+  it('offers the AWS question on Home to Leadership only', () => {
+    expect(hermesSuggestions(KINDS[0], MAYA)).toContain('Why did AWS costs go up?');
+    for (const u of [DANIEL, SARA]) expect(hermesSuggestions(KINDS[0], u)).not.toContain('Why did AWS costs go up?');
+  });
+
+  it('asks about "this one" on a project page', () => {
+    for (const u of [MAYA, DANIEL, SARA]) expect(hermesSuggestions(ATLAS_PAGE, u)).toContain('How is this one doing?');
   });
 });
 

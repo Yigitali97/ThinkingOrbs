@@ -5,6 +5,7 @@ import type { BrainContext } from '../../../assistant/protocol';
 import { hasAny, normalize } from '../../../assistant/text';
 import { HERMES_ROOT } from '../../config';
 import { DAY_MS, projectStatus, waitingPrs } from '../../data/derive';
+import type { ProjectHealth } from '../../data/derive';
 import type { Issue, Message, Person, Project, PullRequest, Sprint } from '../../data/types';
 import type { Answer, ProjectRef } from './shared';
 import {
@@ -18,7 +19,7 @@ const OTHER_TOPICS = [
   'hours', 'hour', 'ticket', 'tickets', 'aws', 'cloud', 'standup', 'meeting', 'decide', 'decided', 'decisions', 'summarize', 'summary',
   'write', 'draft', 'team', 'projects',
 ];
-const HEALTH_WORDS: Record<string, string> = { 'on-track': 'on track', 'at-risk': 'at risk', 'off-track': 'off track' };
+export const HEALTH_WORDS: Record<string, string> = { 'on-track': 'on track', 'at-risk': 'at risk', 'off-track': 'off track' };
 const ALL_PROJECTS = ['projects going', 'projects doing', 'project status', 'status of the projects', 'how are the projects', 'all projects'];
 const ONE_PROJECT = ['how is', "how's", 'how are', 'status', 'doing', 'going', 'on track'];
 const MESSAGE_HINTS = ['block', 'blocked', 'waiting', 'stuck', 'review', 'retry', 'flaky', 'credentials', 'vendor', 'slow'];
@@ -27,18 +28,37 @@ type Target = { target?: ProjectRef; unknown?: string };
 
 const cantFind = (name: string) => `I can't find a project called ${name}.`;
 
+export interface ProjectResult {
+  project: Project;
+  status: ProjectHealth;
+  reasons: string[];
+}
+
+/**
+ * The health of each of `projects` (already visible to the user), from policy-filtered Jira and GitHub data; null when a system
+ * didn't respond. `known` hands over data the caller already fetched with no project filter, so it isn't asked for twice.
+ */
+export async function projectResults(
+  a: Answer,
+  projects: Project[],
+  only: { projectId?: string } = {},
+  known: { issues?: Issue[] | null; prs?: PullRequest[] | null } = {},
+): Promise<ProjectResult[] | null> {
+  const issues = known.issues ?? (await a.get<Issue[]>('jira.issues', only, many('tickets')));
+  const sprints = await a.get<Sprint[]>('jira.sprints', only, many('sprints'));
+  const prs = known.prs ?? (await a.get<PullRequest[]>('github.pullRequests', only, many('pull requests')));
+  if (!issues || !sprints || !prs) return null;
+  return projects.map((p) => ({ project: p, ...projectStatus(p, { issues, prs, sprints }, a.ctx.now) }));
+}
+
 /** Status for one or all visible projects, as `status` blocks linking to each project page. */
 async function answerStatus(a: Answer, target?: ProjectRef): Promise<void> {
   const projects = await resolveProjects(a, target);
   if (!projects) return;
-  const only = target ? { projectId: target.id } : {};
-  const issues = await a.get<Issue[]>('jira.issues', only, many('tickets'));
-  const sprints = await a.get<Sprint[]>('jira.sprints', only, many('sprints'));
-  const prs = await a.get<PullRequest[]>('github.pullRequests', only, many('pull requests'));
-  if (!issues || !sprints || !prs) return a.send(["I need Jira and GitHub to work out project status, so I can't show it right now."]);
+  const results = await projectResults(a, projects, target ? { projectId: target.id } : {});
+  if (!results) return a.send(["I need Jira and GitHub to work out project status, so I can't show it right now."]);
 
-  const results = projects.map((p) => ({ project: p, ...projectStatus(p, { issues, prs, sprints }, a.ctx.now) }));
-  const describe = (r: (typeof results)[number]) => `${r.project.name} is ${HEALTH_WORDS[r.status]}: ${r.reasons.map(lowerFirst).join('; ')}.`;
+  const describe = (r: ProjectResult) => `${r.project.name} is ${HEALTH_WORDS[r.status]}: ${r.reasons.map(lowerFirst).join('; ')}.`;
   const lines: string[] = [];
   if (target) lines.push(describe(results[0]));
   else {

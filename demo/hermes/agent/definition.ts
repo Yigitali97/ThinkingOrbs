@@ -4,13 +4,15 @@ import { createBrain } from '../../assistant/brain';
 import type { AgentDefinition, BrainContext, PageContext, User } from '../../assistant/protocol';
 import { hermesPolicy } from '../policy';
 import { COMPANY } from '../store';
+import { hermesBrief } from './brief';
 import { HERMES_INTENTS } from './intents';
 import { PROJECT_NAMES, teamChannel } from './intents/shared';
 import { hermesTools } from './tools';
 
+const OPEN_TEAM = 'Show me the team dashboard';
 const STANDUP = "What did we decide in yesterday's standup?";
 
-/** Three questions per page kind, each answerable by an intent; Home depends on the role. */
+/** Three questions per page kind, each answerable by an intent; Home opens with the team dashboard and depends on the role. */
 export function hermesSuggestions(page: PageContext, user?: User): string[] {
   const role = user?.role ?? 'developer';
   const channel = `Summarize ${teamChannel(user?.team ?? 'Platform')} this week`;
@@ -28,9 +30,9 @@ export function hermesSuggestions(page: PageContext, user?: User): string[] {
         ? ['Why did AWS costs go up?', channel, 'How are the projects going?']
         : [channel, 'What are my open tickets?', 'How are the projects going?'];
     default:
-      if (role === 'leadership') return ['How is the team doing?', 'How are the projects going?', 'Why did AWS costs go up?'];
-      if (role === 'manager') return ['How is the team doing?', 'How many hours did developers work this week?', STANDUP];
-      return ['What are my open tickets?', 'How many hours did I work this week?', STANDUP];
+      if (role === 'leadership') return [OPEN_TEAM, 'How are the projects going?', 'Why did AWS costs go up?'];
+      if (role === 'manager') return [OPEN_TEAM, 'How is the team doing?', 'How many hours did developers work this week?'];
+      return [OPEN_TEAM, 'What are my open tickets?', 'How many hours did I work this week?'];
   }
 }
 
@@ -46,6 +48,7 @@ export const hermesAgent: AgentDefinition = {
   tools: hermesTools(() => COMPANY),
   policy: hermesPolicy,
   brain: createBrain({ intents: HERMES_INTENTS, notUnderstood }),
+  brief: hermesBrief,
   greeting(user) {
     const first = user?.name.split(' ')[0];
     return `Hi ${first ?? 'there'}. Ask me about the team, hours, projects, code, Teams or AWS.`;
