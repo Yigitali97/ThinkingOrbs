@@ -19,18 +19,31 @@ export function visibleProjectIds(user: User, c: Company): Set<string> {
   return new Set(projects.map((p) => p.id));
 }
 
+/** Whether the user may see this person's individual hours: anyone for Leadership, their own team for a Manager, themself for a Developer. */
+export function seesHoursOf(user: User, person: { id: string; team: string }): boolean {
+  if (user.role === 'leadership') return true;
+  if (user.role === 'manager') return person.team === user.team;
+  return person.id === user.id;
+}
+
+/** What the policy says when it holds back other people's hours from this user, or undefined when it holds nothing back. */
+export function hoursRestriction(user: User): string | undefined {
+  if (user.role === 'manager') return MANAGER_RESTRICTED;
+  if (user.role === 'developer') return DEVELOPER_RESTRICTED;
+  return undefined;
+}
+
 function timeReport(report: TimeReport, user: User, c: Company): { output: TimeReport; restricted?: string } {
   const visible = visibleProjectIds(user, c);
-  const teamOf = new Map(c.people.map((p) => [p.id, p.team as string]));
+  const personOf = new Map(c.people.map((p) => [p.id, p]));
   // Totals come from the unfiltered per-project hours, limited to projects the user can see, then reduced to what the role may keep.
   const rows = (report.projectTotals ?? []).filter((r) => visible.has(r.projectId) && (user.role !== 'developer' || r.team === user.team));
   const teamTotals = totalsByTeam(rows);
-  const onVisible = report.entries.filter((e) => visible.has(e.projectId));
-  if (user.role === 'leadership') return { output: { entries: onVisible, teamTotals } };
-  if (user.role === 'manager') {
-    return { output: { entries: onVisible.filter((e) => teamOf.get(e.personId) === user.team), teamTotals }, restricted: MANAGER_RESTRICTED };
-  }
-  return { output: { entries: onVisible.filter((e) => e.personId === user.id), teamTotals }, restricted: DEVELOPER_RESTRICTED };
+  const entries = report.entries.filter((e) => {
+    const person = personOf.get(e.personId);
+    return visible.has(e.projectId) && !!person && seesHoursOf(user, person);
+  });
+  return { output: { entries, teamTotals }, restricted: hoursRestriction(user) };
 }
 
 export function createHermesPolicy(data: () => Company): Policy {

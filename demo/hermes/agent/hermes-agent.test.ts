@@ -15,6 +15,7 @@ import { hermesTools } from './tools';
 const NOW = new Date('2026-10-07T15:00:00'); // Wednesday
 const MONDAY_EARLY = new Date('2026-10-05T00:30:00');
 const DEVELOPER_COPY = "Individual hours for other people are visible to managers. Here's your team's total instead.";
+const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
 
 const c = generateCompany(HERMES_SEED, NOW);
 const defFor = (co: Company): AgentDefinition => ({ ...hermesAgent, tools: hermesTools(() => co), policy: createHermesPolicy(() => co) });
@@ -68,7 +69,7 @@ describe('project names', () => {
 
   it('lists the intents in the documented order', () => {
     expect(HERMES_INTENTS.map((i) => i.id)).toEqual([
-      'this-project', 'my-tickets', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
+      'this-project', 'my-tickets', 'person-hours', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
       'meeting-decisions', 'channel-summary', 'aws-costs', 'status-draft',
     ]);
   });
@@ -129,6 +130,11 @@ describe("Sara never receives what she can't see", () => {
     ['Write a status update for the team'],
     ['How is this one doing?', ATLAS_PAGE],
     ['How is this one doing?', { page: 'project', id: 'comet', title: 'Comet' }],
+    ['How many hours did Leo work this week?'],
+    ["Show me Leo's timesheet"],
+    ['How many hours did Amir Haddad work last week?'],
+    ['How is the Product team doing?'],
+    ['Write a status update for Beacon'],
   ];
 
   it.each(QUESTIONS)('%s', async (q, page) => {
@@ -150,6 +156,124 @@ describe("Sara never receives what she can't see", () => {
     expect(json).not.toContain('NaN');
     expect(json).not.toContain('Infinity');
     expect(json).not.toMatch(/BCN-|CMT-/);
+  });
+});
+
+describe("Daniel never receives a Product person's hours", () => {
+  const PRODUCT = new Set(c.people.filter((p) => p.team === 'Product').map((p) => p.id));
+  const QUESTIONS = [
+    'How is the team doing?',
+    'How is the Product team doing?',
+    'How many hours did developers work this week?',
+    'How many hours did developers work last month?',
+    'How many hours did I work this week?',
+    'How many hours did Leo work this week?',
+    'How many hours did Amir work this week?',
+    "Show me Chloe's timesheet",
+    'How many hours did Omar Reyes work last week?',
+    'Write a status update for the team',
+    'Write a status update for Beacon',
+  ];
+
+  it.each(QUESTIONS)('%s', async (q) => {
+    const r = await ask(q, DANIEL);
+    for (const res of r.received) {
+      if (!res.ok) continue;
+      const data = res.data as { entries?: { personId: string }[] };
+      if (Array.isArray(data) || !Array.isArray(data.entries)) continue;
+      for (const e of data.entries) expect(PRODUCT.has(e.personId), `${q}: ${e.personId}`).toBe(false);
+    }
+  });
+});
+
+describe("one person's hours", () => {
+  const monday = new Date(2026, 9, 5).getTime();
+  const hoursThisWeek = (id: string) =>
+    Math.round(c.time.filter((e) => e.personId === id && e.at >= monday && e.at <= NOW.getTime()).reduce((s, e) => s + e.hours, 0) * 10) / 10;
+  const platformTotal = () => {
+    const platform = new Set(c.people.filter((p) => p.team === 'Platform').map((p) => p.id));
+    const total = c.time.filter((e) => platform.has(e.personId) && e.at >= monday && e.at <= NOW.getTime()).reduce((s, e) => s + e.hours, 0);
+    return `${(Math.round(total * 10) / 10).toLocaleString('en-US')} h`;
+  };
+
+  it.each(['How many hours did Leo work this week?', "Show me Leo's timesheet", 'How many hours did Leo Park log this week?'])(
+    'shows Maya Leo’s hours against capacity: %s',
+    async (q) => {
+      const r = await ask(q, MAYA);
+      expect(r.text).toContain(`Leo Park logged ${hoursThisWeek('p-leo').toLocaleString('en-US')} h this week`);
+      expect(r.text).toMatch(/against [\d.,]+ h of capacity so far/);
+      expect(r.text).not.toContain('You logged');
+      expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+      expect(r.text).toMatch(/Sources: .*Clockify/);
+    },
+  );
+
+  it('shows Daniel Leo, who is in his team, with no restriction note', async () => {
+    const r = await ask('How many hours did Leo work this week?', DANIEL);
+    expect(r.text).toContain(`Leo Park logged ${hoursThisWeek('p-leo').toLocaleString('en-US')} h this week`);
+    expect(r.text).not.toContain(MANAGER_COPY);
+  });
+
+  it('gives Daniel the Manager copy and the Product total for a Product person', async () => {
+    const r = await ask('How many hours did Amir work this week?', DANIEL);
+    expect(r.text.startsWith(MANAGER_COPY)).toBe(true);
+    expect(r.text).toMatch(/The Product team logged [\d.,]+ h this week in total\./);
+    expect(r.text).not.toContain('Amir Haddad logged');
+    expect(r.text).toMatch(/Sources: .*Clockify/);
+  });
+
+  it.each(['How many hours did Leo work this week?', "Show me Leo's timesheet", 'How many hours did Amir work this week?'])(
+    'gives Sara the Developer copy and her team total: %s',
+    async (q) => {
+      const r = await ask(q, SARA);
+      expect(r.text.startsWith(DEVELOPER_COPY)).toBe(true);
+      expect(r.text).toContain(`The Platform team logged ${platformTotal()} this week in total.`);
+      expect(r.text).not.toMatch(/Leo Park logged|Amir Haddad logged|You logged/);
+      expect(r.tools).toContain('clockify.timeEntries');
+    },
+  );
+
+  it('answers as my-hours when Sara names herself', async () => {
+    const r = await ask('How many hours did Sara work this week?', SARA);
+    expect(r.text).toContain('You logged 11 h this week');
+    expect(r.text).not.toContain(DEVELOPER_COPY);
+  });
+});
+
+describe('teams and projects outside what you can see', () => {
+  it('tells Sara the Product team is outside what she can see and offers Platform', async () => {
+    const r = await ask('How is the Product team doing?', SARA);
+    expect(r.text).toContain("The Product team isn't one of the teams you can see.");
+    expect(r.text).toContain('Platform');
+    expect(r.blocks).toHaveLength(0);
+    expect(r.tools).not.toContain('clockify.timeEntries');
+    expect(r.tools).not.toContain('jira.issues');
+  });
+
+  it('answers Maya about the Product team only', async () => {
+    const r = await ask('How is the Product team doing?', MAYA);
+    expect(r.text).toContain('The Product team logged');
+    expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+  });
+
+  it('tells Sara Beacon is not one of her projects instead of drafting for Platform', async () => {
+    const r = await ask('Write a status update for Beacon', SARA);
+    expect(r.text).toContain("Beacon isn't one of the projects you can see. Your projects: Atlas, Delta.");
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(0);
+    expect(r.tools).toEqual(['directory.projects']);
+  });
+
+  it('tells Sara she cannot draft for the Product team', async () => {
+    const r = await ask('Write a status update for the Product team', SARA);
+    expect(r.text).toContain("The Product team isn't one of the teams you can see.");
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(0);
+  });
+
+  it('drafts a Product update for Maya when she names Beacon', async () => {
+    const r = await ask('Write a status update for Beacon', MAYA);
+    const draft = ofKind(r.blocks, 'draft')[0];
+    expect(draft.to).toBe('#product');
+    expect(draft.subject).toBe('Product team status update');
   });
 });
 
@@ -257,9 +381,11 @@ describe('meetings, channels, tickets and hours', () => {
     expect(r.text).toMatch(/Sources: Jira/);
   });
 
-  it("gives Sara her own hours this week", async () => {
+  it("gives Sara her own hours this week, with no restriction note", async () => {
     const r = await ask('How many hours did I work this week?', SARA);
     expect(r.text).toContain('You logged 11 h this week');
+    expect(r.text).not.toContain(DEVELOPER_COPY);
+    expect(r.text.startsWith('You logged')).toBe(true);
   });
 });
 

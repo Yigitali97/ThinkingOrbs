@@ -54,13 +54,16 @@ export class Answer {
     private signal: AbortSignal,
   ) {}
 
-  /** Calls a tool and records the outcome. `what` names the data for the "didn't respond" line. */
-  async result<O>(toolId: string, input: unknown, what: Missing): Promise<ToolResult<O>> {
+  /**
+   * Calls a tool and records the outcome. `what` names the data for the "didn't respond" line. Pass `note: false` when the
+   * answer only uses data the policy hands over in full (the user's own hours, say), so its restriction note isn't said.
+   */
+  async result<O>(toolId: string, input: unknown, what: Missing, opts: { note?: boolean } = {}): Promise<ToolResult<O>> {
     const r = await this.ctx.call<O>(toolId, input);
     const system = systemOf(toolId);
     if (r.ok) {
       if (!this.systems.includes(system)) this.systems.push(system);
-      if (r.restricted && !this.notes.includes(r.restricted)) this.notes.push(r.restricted);
+      if (r.restricted && opts.note !== false) this.note(r.restricted);
     } else if (r.reason !== 'denied') {
       const failure = this.failures.get(system) ?? { reason: r.reason, what: [] };
       if (!failure.what.some((w) => w.text === what.text)) failure.what.push(what);
@@ -70,11 +73,16 @@ export class Answer {
   }
 
   /** The tool's data, or null when the system failed. A denial throws, which ends the answer with its reason. */
-  async get<O>(toolId: string, input: unknown, what: Missing): Promise<O | null> {
-    const r = await this.result<O>(toolId, input, what);
+  async get<O>(toolId: string, input: unknown, what: Missing, opts: { note?: boolean } = {}): Promise<O | null> {
+    const r = await this.result<O>(toolId, input, what, opts);
     if (r.ok) return r.data;
     if (r.reason === 'denied') throw new Denied(r.message, r.alternative);
     return null;
+  }
+
+  /** A restriction note to say first, once. */
+  note(text: string): void {
+    if (!this.notes.includes(text)) this.notes.push(text);
   }
 
   /** Says restriction notes first, then `lines`, then what is missing; then the blocks, then the sources. */
@@ -132,6 +140,23 @@ export function unknownProjectName(text: string): string | null {
 
 export type ProjectRef = { id: string; name: string };
 
+/** The delivery teams, named after the teams that own projects. */
+export const TEAM_NAMES: string[] = [...new Set(PROJECT_NAMES.map((p) => p.team))];
+
+/** The team named in the text: "Product" capitalized, or "product team" in any case. */
+export function teamIn(text: string): string | null {
+  return TEAM_NAMES.find((t) => new RegExp(`\\b${t}\\b`).test(text) || hasAny(text, [`${t} team`])) ?? null;
+}
+
+/** The people Hermes recognizes by first or full name. Names and teams only: anyone's hours still come through the policy. */
+export const PERSON_NAMES: { id: string; name: string; team: string }[] = COMPANY.people.map((p) => ({ id: p.id, name: p.name, team: p.team }));
+export type PersonRef = (typeof PERSON_NAMES)[number];
+
+/** The person named in the text by full or first name ("Leo", "Leo Park", "Leo's"). */
+export function personIn(text: string): PersonRef | null {
+  return PERSON_NAMES.find((p) => hasAny(text, [p.name])) ?? PERSON_NAMES.find((p) => hasAny(text, [p.name.split(' ')[0]])) ?? null;
+}
+
 /**
  * The projects an answer covers: the named one if the policy lets this user see it, otherwise every visible project.
  * The check happens before anything project-specific is asked for. When the project is out of reach, or the
@@ -148,6 +173,23 @@ export async function resolveProjects(a: Answer, target?: ProjectRef): Promise<P
   if (project) return [project];
   const yours = visible.length ? `Your projects: ${visible.map((p) => p.name).join(', ')}.` : "You don't have access to any projects.";
   await a.send([`${target.name} isn't one of the projects you can see. ${yours}`]);
+  return null;
+}
+
+/**
+ * The team an answer covers, when the policy lets this user see it: a team is visible when one of the projects the
+ * directory hands this user belongs to it. Otherwise this says so, offers the user's own team, and returns null.
+ */
+export async function resolveTeam(a: Answer, team: string): Promise<string | null> {
+  const visible = await a.get<Project[]>('directory.projects', {}, one('the project list'));
+  if (!visible) {
+    await a.send([]);
+    return null;
+  }
+  if (visible.some((p) => p.team === team)) return team;
+  const own = a.ctx.user?.team;
+  const offer = own && visible.some((p) => p.team === own) ? ` I can answer for the ${own} team instead.` : '';
+  await a.send([`The ${team} team isn't one of the teams you can see.${offer}`]);
   return null;
 }
 

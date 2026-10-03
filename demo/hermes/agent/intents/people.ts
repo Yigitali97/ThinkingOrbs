@@ -1,4 +1,4 @@
-// Intents about people and time: my tickets, my hours, developer hours, team health and the status-update draft.
+// Intents about people and time: my tickets, one person's hours, my hours, developer hours, team health and the status-update draft.
 // Every figure comes from policy-filtered tool results, so a role only ever sums what it may see.
 
 import type { Block, Column, Row, Series, Tone, User } from '../../../assistant/protocol';
@@ -6,11 +6,13 @@ import { hasAny, percentChange } from '../../../assistant/text';
 import type { DateRange } from '../../../assistant/text';
 import { capacityBetween, loadState, projectStatus } from '../../data/derive';
 import type { Issue, Meeting, Person, Project, PullRequest, Sprint } from '../../data/types';
+import { hoursRestriction, seesHoursOf } from '../../policy';
 import type { TimeReport } from '../tools';
 import {
   Answer, DRAFT_WORDS, Denied, PROJECT_NAMES, capitalize, comparisonRange, dayLabel, hours, intent, isDeveloper, lastDays, listOf,
-  lowerFirst, many, one, percentOf, plural, rangeIn, round1, span, teamChannel,
+  lowerFirst, many, one, percentOf, personIn, plural, projectIn, rangeIn, resolveProjects, resolveTeam, round1, span, teamChannel, teamIn,
 } from './shared';
+import type { PersonRef } from './shared';
 
 const SIGN_IN = 'Sign in to use Hermes.';
 const HOURS_WORDS = ['hours', 'hour', 'worked', 'timesheet', 'timesheets'];
@@ -82,45 +84,97 @@ export const myTickets = intent<true>(
   },
 );
 
-// ------------------------------------------------------------------ my hours
+// ------------------------------------------------------------------ my hours and one person's hours
 
-export const myHours = intent<{ text: string }>(
-  'my-hours',
-  (text) => (hasAny(text, HOURS_WORDS) && hasAny(text, SELF_WORDS) && !hasAny(text, GROUP_WORDS) ? { text } : null),
-  async ({ text }, a) => {
+/** Hours per project from report entries, as a table, or nothing when there are none. */
+function byProjectTable(entries: TimeReport['entries'], caption: string): Block[] {
+  const byProject = new Map<string, number>();
+  for (const e of entries) byProject.set(e.projectId, (byProject.get(e.projectId) ?? 0) + e.hours);
+  if (!byProject.size) return [];
+  const rows = [...byProject].map(([id, h]) => ({ project: projectName(id), hours: round1(h) }));
+  return [{ kind: 'table', columns: [{ key: 'project', label: 'Project' }, right('hours', 'Hours')], rows, caption }];
+}
+
+/** The asker's own hours. The policy hands those over in full, so its restriction note isn't said. */
+async function answerMyHours(text: string, a: Answer): Promise<void> {
+  const user = requireUser(a);
+  const { now } = a.ctx;
+  const range = rangeIn(text, now);
+  const report = await a.get<TimeReport>('clockify.timeEntries', { ...span(range, now), personId: user.id }, many('your hours'), { note: false });
+  if (!report) return a.send([]);
+  const people = await a.get<Person[]>('directory.people', {}, one('your capacity'));
+  const mine = report.entries.filter((e) => e.personId === user.id);
+  const total = sum(mine.map((e) => e.hours));
+  const me = people?.find((p) => p.id === user.id);
+  const capacity = me ? capacityIn(me, range, now) : 0;
+  const pct = percentOf(total, capacity);
+  const lines = [
+    `You logged ${hours(total)} ${range.label}` +
+      (pct !== null ? `, against ${hours(capacity)} of capacity${soFar(range, now)} (${pct}%)` : '') +
+      '.',
+  ];
+  const team = report.teamTotals.find((t) => t.team === user.team);
+  if (team && user.role !== 'leadership') lines.push(`The ${user.team} team logged ${hours(team.hours)} in total.`);
+  return a.send(lines, byProjectTable(mine, `Your hours ${range.label} by project`));
+}
+
+/** A person named in the text who isn't the asker: "Leo's timesheet" is about Leo, even with "me" in it. */
+const someoneElse = (text: string, user?: User): PersonRef | null => {
+  const person = personIn(text);
+  return person && person.id !== user?.id ? person : null;
+};
+
+export const personHours = intent<{ text: string; person: PersonRef }>(
+  'person-hours',
+  (text) => {
+    if (!hasAny(text, HOURS_WORDS) || hasAny(text, GROUP_WORDS)) return null;
+    const person = personIn(text);
+    return person ? { text, person } : null;
+  },
+  async ({ text, person }, a) => {
     const user = requireUser(a);
+    if (person.id === user.id) return answerMyHours(text, a);
     const { now } = a.ctx;
     const range = rangeIn(text, now);
-    const report = await a.get<TimeReport>('clockify.timeEntries', { ...span(range, now), personId: user.id }, many('your hours'));
+    const people = await a.get<Person[]>('directory.people', {}, one(`${person.name}'s capacity`));
+    const target = people?.find((p) => p.id === person.id);
+    const team = target?.team ?? person.team;
+
+    if (!seesHoursOf(user, { id: person.id, team })) {
+      // Not this user's to see: say so in the policy's words, and give the team total they may see instead.
+      const restriction = hoursRestriction(user);
+      if (restriction) a.note(restriction);
+      const report = await a.get<TimeReport>('clockify.timeEntries', span(range, now), many('team totals'));
+      if (!report) return a.send([]);
+      const total = report.teamTotals.find((t) => t.team === team) ?? report.teamTotals.find((t) => t.team === user.team);
+      return a.send([total ? `The ${total.team} team logged ${hours(total.hours)} ${range.label} in total.` : `No team hours were logged ${range.label}.`]);
+    }
+
+    const input = { ...span(range, now), personId: person.id };
+    const report = await a.get<TimeReport>('clockify.timeEntries', input, many(`${person.name}'s hours`), { note: false });
     if (!report) return a.send([]);
-    const people = await a.get<Person[]>('directory.people', {}, one('your capacity'));
-    const mine = report.entries.filter((e) => e.personId === user.id);
-    const total = sum(mine.map((e) => e.hours));
-    const me = people?.find((p) => p.id === user.id);
-    const capacity = me ? capacityIn(me, range, now) : 0;
+    const theirs = report.entries.filter((e) => e.personId === person.id);
+    const total = sum(theirs.map((e) => e.hours));
+    const capacity = target ? capacityIn(target, range, now) : 0;
     const pct = percentOf(total, capacity);
     const lines = [
-      `You logged ${hours(total)} ${range.label}` +
+      `${person.name} logged ${hours(total)} ${range.label}` +
         (pct !== null ? `, against ${hours(capacity)} of capacity${soFar(range, now)} (${pct}%)` : '') +
         '.',
     ];
-    const team = report.teamTotals.find((t) => t.team === user.team);
-    if (team && user.role !== 'leadership') lines.push(`The ${user.team} team logged ${hours(team.hours)} in total.`);
-
-    const byProject = new Map<string, number>();
-    for (const e of mine) byProject.set(e.projectId, (byProject.get(e.projectId) ?? 0) + e.hours);
-    const blocks: Block[] = byProject.size
-      ? [
-          {
-            kind: 'table',
-            columns: [{ key: 'project', label: 'Project' }, right('hours', 'Hours')],
-            rows: [...byProject].map(([id, h]) => ({ project: projectName(id), hours: round1(h) })),
-            caption: `Your hours ${range.label} by project`,
-          },
-        ]
-      : [];
-    return a.send(lines, blocks);
+    const stat: Block = {
+      kind: 'stat',
+      items: [{ label: `${person.name.split(' ')[0]}'s hours`, value: hours(total), delta: pct === null ? undefined : `${pct}% of capacity` }],
+    };
+    return a.send(lines, [stat, ...byProjectTable(theirs, `${person.name}'s hours ${range.label} by project`)]);
   },
+);
+
+export const myHours = intent<{ text: string }>(
+  'my-hours',
+  (text, ctx) =>
+    hasAny(text, HOURS_WORDS) && hasAny(text, SELF_WORDS) && !hasAny(text, GROUP_WORDS) && !someoneElse(text, ctx.user) ? { text } : null,
+  ({ text }, a) => answerMyHours(text, a),
 );
 
 // ------------------------------------------------------------------ developer hours
@@ -236,13 +290,13 @@ export interface Health {
   prs: PullRequest[] | null;
 }
 
-/** Gathers the team-health figures: the user's team, or both delivery teams for Leadership. */
-export async function gatherHealth(a: Answer, text: string): Promise<Health> {
+/** Gathers the team-health figures: the given teams, or else the user's team, or both delivery teams for Leadership. */
+export async function gatherHealth(a: Answer, text: string, only?: string[]): Promise<Health> {
   const user = requireUser(a);
   const { now } = a.ctx;
   const range = rangeIn(text, now);
   const window = span(range, now);
-  const teams = user.role === 'leadership' ? [...new Set(PROJECT_NAMES.map((p) => p.team))] : [user.team];
+  const teams = only ?? (user.role === 'leadership' ? [...new Set(PROJECT_NAMES.map((p) => p.team))] : [user.team]);
   const inScope = new Set(PROJECT_NAMES.filter((p) => teams.includes(p.team)).map((p) => p.id));
 
   const people = await a.get<Person[]>('directory.people', {}, many('names and capacity'));
@@ -253,11 +307,11 @@ export async function gatherHealth(a: Answer, text: string): Promise<Health> {
 
   const members = people?.filter((p) => teams.includes(p.team)) ?? null;
   let loads: Load[] | null = null;
-  if (people && time) {
-    // Only individuals the role may see: everyone for Leadership, their team for a Manager, themself for a Developer.
-    const visible = (p: Person) => user.role === 'leadership' || (user.role === 'manager' ? p.team === user.team : p.id === user.id);
-    loads = people
-      .filter((p) => isDeveloper(p) && teams.includes(p.team) && visible(p))
+  // Only individuals the role may see: everyone for Leadership, their team for a Manager, themself for a Developer.
+  // A team with nobody the user may see individually (another team, for a Manager) gets no over/under list at all.
+  const seen = people?.filter((p) => isDeveloper(p) && teams.includes(p.team) && seesHoursOf(user, p)) ?? [];
+  if (people && time && seen.length) {
+    loads = seen
       .map((p) => {
         const h = hoursOf(time, new Set([p.id]));
         const capacity = capacityIn(p, range, now);
@@ -287,11 +341,29 @@ export async function gatherHealth(a: Answer, text: string): Promise<Health> {
 
 const capacityPct = (h: Health) => (h.hours !== null && h.capacity !== null ? percentOf(h.hours, h.capacity) : null);
 
+/**
+ * The teams a question names, through a project ("for Beacon") or a team ("the Product team"), once the policy lets this
+ * user see them. Undefined when nothing is named; null when the named one is out of reach, after saying so.
+ */
+async function namedTeams(a: Answer, text: string, byProject: boolean): Promise<string[] | null | undefined> {
+  const project = byProject ? projectIn(text, PROJECT_NAMES) : null;
+  if (project) {
+    const visible = await resolveProjects(a, project);
+    return visible ? [visible[0].team] : null;
+  }
+  const team = teamIn(text);
+  if (!team) return undefined;
+  const visible = await resolveTeam(a, team);
+  return visible ? [visible] : null;
+}
+
 export const teamHealth = intent<{ text: string }>(
   'team-health',
   (text) => (hasAny(text, TEAM_HEALTH_PHRASES) ? { text } : null),
   async ({ text }, a) => {
-    const h = await gatherHealth(a, text);
+    const teams = await namedTeams(a, text, false);
+    if (teams === null) return;
+    const h = await gatherHealth(a, text, teams);
     const { now } = a.ctx;
     const pct = capacityPct(h);
     const tone: Tone = pct === null ? 'neutral' : pct > 110 || pct < 70 ? 'warn' : 'good';
@@ -363,7 +435,9 @@ export const statusDraft = intent<{ text: string }>(
   'status-draft',
   (text) => (hasAny(text, DRAFT_WORDS) && hasAny(text, DRAFT_KINDS) ? { text } : null),
   async ({ text }, a) => {
-    const h = await gatherHealth(a, text);
+    const teams = await namedTeams(a, text, true);
+    if (teams === null) return;
+    const h = await gatherHealth(a, text, teams);
     const projects = await a.get<Project[]>('directory.projects', {}, one('the project list'));
     const sprints = await a.get<Sprint[]>('jira.sprints', {}, many('sprints'));
     const pct = capacityPct(h);
