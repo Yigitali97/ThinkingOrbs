@@ -1,7 +1,9 @@
 // The conversation as a list of turns: your question, the live activity row while the reply works, then the folded
 // activity summary, the streamed answer and its blocks. Only the latest answer is a live region for screen readers.
-// The agent's brief has no question, so it shows only its answer.
+// The agent's brief has no question and is not an answer: it shows only what it said, with no "Stopped." note, and nothing at all
+// when it said nothing. A site can add something after a turn (Hermes adds "Open <view>" there).
 
+import type { ReactNode } from 'react';
 import { ActivityRow } from '../chat-app/ActivityRow';
 import { ActivitySummary } from '../chat-app/ActivitySummary';
 import { shownActivity } from '../chat-app/activity';
@@ -30,6 +32,11 @@ export function foldTools(reply: AssistantReply): AssistantReply {
     endedAt: ends.every((e) => e !== undefined) ? Math.max(...(ends as number[])) : undefined,
   };
   return { ...reply, activities: reply.activities.flatMap((a): Activity[] => (a === tools[0] ? [merged] : a.kind === 'tools' ? [] : [a])) };
+}
+
+/** Whether a brief turn has anything to show: a brief stopped before its first word, or with nothing to say, shows nothing. */
+export function briefShown(turn: Turn): boolean {
+  return turn.reply.text.trim().length > 0;
 }
 
 function Question({ turn }: { turn: Turn }) {
@@ -70,15 +77,33 @@ function Reply({ turn, latest }: { turn: Turn; latest: boolean }) {
   );
 }
 
-export function Thread({ turns }: { turns: Turn[] }) {
+function Brief({ turn }: { turn: Turn }) {
+  const { reply } = turn;
+  return (
+    <li className="as-turn as-brief" data-brief={reply.state}>
+      <div className="as-reply">
+        <div className="as-answer">
+          <Answer text={reply.text} tokens={reply.tokens} streaming={reply.state === 'writing'} />
+        </div>
+      </div>
+    </li>
+  );
+}
+
+export function Thread({ turns, after }: { turns: Turn[]; after?: (turn: Turn) => ReactNode }) {
   return (
     <ol className="as-thread" aria-label="Conversation">
-      {turns.map((t, i) => (
-        <li key={t.id} className="as-turn" data-turn={t.reply.state}>
-          {!t.brief && <Question turn={t} />}
-          <Reply turn={t} latest={i === turns.length - 1} />
-        </li>
-      ))}
+      {turns.map((t, i) =>
+        t.brief ? (
+          briefShown(t) && <Brief key={t.id} turn={t} />
+        ) : (
+          <li key={t.id} className="as-turn" data-turn={t.reply.state}>
+            <Question turn={t} />
+            <Reply turn={t} latest={i === turns.length - 1} />
+            {after?.(t)}
+          </li>
+        ),
+      )}
     </ol>
   );
 }

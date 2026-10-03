@@ -1,5 +1,6 @@
 // The canvas: where Hermes shows a dashboard. Beside the conversation from 1024px (a labelled aside), a full-screen modal
-// sheet below that (Tab stays inside, Esc closes). Opening moves focus to it; closing returns focus to what opened it.
+// sheet below that (Tab stays inside, Esc closes). A view you open takes focus; one Hermes opens (`quiet`) leaves your focus
+// where it is. Closing returns focus to whatever opened the view now showing.
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { KeyboardEvent, ReactNode, RefObject } from 'react';
@@ -8,17 +9,17 @@ import { navigate, useLocation } from '../../site/router';
 import { HERMES_ROOT } from '../config';
 import { stillThere, trapTab, useWide } from './focus';
 
-export function Canvas({ title, view }: { title: string; view: ReactNode }) {
+export function Canvas({ title, view, quiet = false }: { title: string; view: ReactNode; quiet?: boolean }) {
   const wide = useWide();
   const { path } = useLocation();
   const ref = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const quietRef = useRef(quiet);
+  quietRef.current = quiet;
 
-  // remember what had focus when the canvas opened, and give it back when the canvas closes
+  // give focus back to what opened the view now showing when the canvas closes
   useLayoutEffect(() => {
-    const active = document.activeElement;
-    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
     const self = ref.current;
     return () => {
       const back = opener.current;
@@ -32,11 +33,15 @@ export function Canvas({ title, view }: { title: string; view: ReactNode }) {
     };
   }, []);
 
-  // a new address (or a new layout) starts at the top, with focus on the canvas so it is announced; switching user can
-  // retitle the same address (a project becomes Not found), which is not a navigation, so focus stays where it was
+  // a new address (or a new layout) starts at the top. What had focus outside the canvas opened this view, so closing returns
+  // there; a link inside the canvas (or StrictMode's second run, when the canvas already has focus) keeps the earlier opener.
+  // Then the canvas takes focus so it is announced, unless Hermes opened it: you may be typing. Switching user can retitle the
+  // same address (a project becomes Not found), which is not a navigation, so focus stays where it was.
   useLayoutEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && !ref.current?.contains(active)) opener.current = active;
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
-    ref.current?.focus({ preventScroll: true });
+    if (!quietRef.current) ref.current?.focus({ preventScroll: true });
   }, [path, wide]);
 
   // the sheet covers the conversation, so the page behind it must not scroll

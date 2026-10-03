@@ -250,24 +250,145 @@ button { font: inherit; color: inherit; }
 
 /* ----------------------------------------------------------------- conversation */
 
-.talk { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* the conversation is a size container, so the orbit and the docked bot fit the column they are in, canvas or not */
+.talk { container: talk / inline-size; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .talk-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 32px 24px 16px; scrollbar-width: thin; }
 .talk-column { width: 100%; max-width: 760px; margin: 0 auto; }
 .talk-dock { flex: none; padding: 8px 24px max(20px, env(safe-area-inset-bottom)); }
 
-/* the first screen: greeting, composer and suggestions held together in the middle */
+/* the first screen: the hero, the composer and the chips held together in the middle */
 .talk[data-empty] { overflow-y: auto; }
-.talk[data-empty] .talk-scroll { flex: none; overflow: visible; margin-top: auto; padding-bottom: 28px; }
-.talk[data-empty] .talk-dock { margin-bottom: auto; padding-bottom: max(48px, env(safe-area-inset-bottom)); }
+.talk[data-empty] .talk-scroll { flex: none; overflow: visible; margin-top: auto; padding-top: 12px; padding-bottom: 22px; }
+.talk[data-empty] .talk-dock { margin-bottom: auto; padding-bottom: max(32px, env(safe-area-inset-bottom)); }
 .talk[data-empty] .talk-column { max-width: 640px; }
-.talk-hello { max-width: 640px; margin: 0 auto; text-align: center; }
+
+/* ----------------------------------------------------------------- the hero */
+
+.hero { display: flex; flex-direction: column; align-items: center; max-width: 720px; margin: 0 auto; text-align: center; }
 .greeting {
-  margin: 0;
-  font: 600 clamp(34px, 5.2vw, 54px)/1.05 var(--display);
+  margin: 2px 0 0;
+  font: 600 clamp(32px, 4.2vw, 46px)/1.06 var(--display);
   letter-spacing: -0.03em;
   text-wrap: balance;
 }
-.talk-sub { margin: 14px auto 0; max-width: 46ch; color: var(--text-2); font-size: 16px; line-height: 1.55; text-wrap: pretty; }
+/* the brief: Hermes's voice, the serif of its answers; the slot keeps three lines so nothing jumps as it streams in */
+.hero-brief-slot { width: 100%; max-width: 58ch; min-height: calc(3 * 1.6em); margin-top: 12px; font: 17.5px/1.6 var(--serif); }
+.hero-brief { margin: 0; color: var(--text-soft); text-wrap: pretty; }
+.hero-status { color: var(--text-2); font: 14px/1.6 var(--sans); }
+.hero-caret {
+  display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -0.12em;
+  background: var(--cyan); animation: caret 1s steps(1) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+
+/* the orbit: a ring round the bot, drawn in a 640 × 360 stage; the systems sit on it and beam to the bot while it reads them */
+.orbit { position: relative; width: min(100%, 640px); aspect-ratio: 640 / 360; }
+.orbit-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.orbit-ring { fill: none; stroke-width: 1.2; }
+.orbit-ring-dash {
+  fill: none; stroke: var(--cyan); stroke-opacity: 0.5; stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 0.5 15;
+  animation: orbit-drift 60s linear infinite;
+}
+@keyframes orbit-drift { to { stroke-dashoffset: -620; } }
+.orbit-link { stroke: rgba(179, 168, 255, 0.22); stroke-width: 1; stroke-dasharray: 2 5; transition: stroke 0.3s, stroke-opacity 0.3s; }
+.orbit-link[data-active] {
+  stroke: var(--cyan); stroke-opacity: 0.95; stroke-width: 1.8; stroke-dasharray: 7 6;
+  filter: drop-shadow(0 0 4px rgba(63, 216, 255, 0.85));
+  animation: beam-flow 0.7s linear infinite;
+}
+@keyframes beam-flow { to { stroke-dashoffset: -13; } }
+.orbit-bot { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+.orbit-nodes { position: absolute; inset: 0; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.orbit-nodes li { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); pointer-events: auto; }
+.orbit-node {
+  position: relative; display: grid; place-items: center; width: 48px; height: 48px; padding: 0;
+  border: 1px solid rgba(139, 124, 255, 0.5); border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, rgba(139, 124, 255, 0.3), rgba(14, 18, 50, 0.92) 72%);
+  color: #cfd3f2; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.3s;
+}
+.orbit-node:hover { border-color: rgba(63, 216, 255, 0.8); color: var(--text); }
+.orbit-node[data-active] {
+  border-color: var(--cyan); color: #e8fbff;
+  background: radial-gradient(circle at 50% 35%, rgba(63, 216, 255, 0.42), rgba(14, 18, 50, 0.92) 75%);
+  box-shadow: 0 0 0 4px rgba(63, 216, 255, 0.14), 0 0 26px rgba(63, 216, 255, 0.7);
+  transition-duration: 0.12s;
+}
+.orbit-name {
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  color: var(--text-2); font-size: 13px; font-weight: 550; line-height: 1.2; white-space: nowrap;
+  /* the ring runs behind the names: a halo of the background keeps them clean */
+  text-shadow: 0 0 4px var(--bg), 0 0 8px var(--bg), 0 0 2px var(--bg);
+  transition: color 0.2s;
+}
+.orbit-node:hover .orbit-name, .orbit-node[data-active] .orbit-name { color: var(--text); }
+
+/* a narrow column: the ring folds into one row of icons under the bot */
+@container talk (max-width: 560px) {
+  .orbit { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 18px; aspect-ratio: auto; }
+  .orbit-lines { display: none; }
+  .orbit-bot { position: static; transform: none; }
+  .orbit-nodes { position: static; display: flex; justify-content: center; gap: 8px; pointer-events: auto; }
+  /* the ring, flattened: one line through the row */
+  .orbit-nodes::before {
+    content: ''; position: absolute; left: 6%; right: 6%; margin-top: 22px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(139, 124, 255, 0.55) 20%, rgba(63, 216, 255, 0.45) 50%, rgba(139, 124, 255, 0.55) 80%, transparent);
+  }
+  .orbit-nodes li { position: relative; left: auto; top: auto; transform: none; }
+  .orbit-node { width: 44px; height: 44px; }
+  .orbit-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* ----------------------------------------------------------------- the docked bot */
+
+/* a conversation keeps a band above the composer, where the bot says what it is reading */
+.talk:not([data-empty]) .talk-scroll { padding-bottom: 0; }
+.talk:not([data-empty]) .dock-row { padding-top: 36px; }
+.dock-row { position: relative; display: flex; align-items: flex-end; gap: 10px; }
+.dock-main { flex: 1; min-width: 0; }
+.docked { position: relative; flex: none; }
+.docked-bot { position: relative; line-height: 0; }
+.docked-bot .bot { filter: drop-shadow(0 0 14px rgba(111, 98, 224, 0.45)); }
+.docked-hit {
+  position: absolute; inset: 0; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; cursor: pointer;
+}
+.docked-status {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 1;
+  margin: 0; padding: 4px 11px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(14, 18, 50, 0.88); color: var(--text-soft); font-size: 13px; line-height: 1.4;
+}
+/* with room either side of the column, the bot stands in the gutter so the composer lines up with the thread */
+@container talk (min-width: 1010px) {
+  .docked:not([data-overlay]) { position: absolute; right: calc(100% + 14px); bottom: 0; }
+  /* the line sits over the composer's left edge, in the band */
+  .docked:not([data-overlay]) .docked-status { left: calc(100% + 14px); bottom: auto; top: -4px; }
+}
+
+/* below 1024px, over the canvas sheet (bottom left, in the strip the sheet keeps clear) or beside the rail drawer */
+.docked[data-overlay] {
+  position: fixed; z-index: 55;
+  left: max(12px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 10px;
+}
+.docked[data-overlay] .docked-status { position: static; order: 1; max-width: calc(100vw - 100px); }
+.docked[data-overlay='drawer'] { left: calc(min(300px, 86vw) + 10px); }
+.docked[data-overlay='drawer'] .docked-status { display: none; }
+
+/* what Hermes offers to open below 1024px, instead of a sheet over the answer */
+.open-offer { margin: 2px 0 0; }
+.open-chip {
+  display: inline-flex; align-items: center; gap: 9px; min-height: 40px; padding: 8px 16px 8px 12px;
+  border: 1px solid rgba(63, 216, 255, 0.5); border-radius: 999px;
+  background: rgba(63, 216, 255, 0.08); color: var(--text); font-size: 14px; font-weight: 550; text-decoration: none;
+}
+.open-chip::before {
+  content: ''; width: 14px; height: 12px; border: 1.5px solid var(--cyan); border-radius: 3px;
+  box-shadow: inset -5px 0 0 -3.5px var(--cyan);
+}
+.open-chip:hover { background: rgba(63, 216, 255, 0.14); }
 
 /* ---------------------------------------------------------- assistant in Hermes's colours */
 
@@ -356,6 +477,8 @@ button { font: inherit; color: inherit; }
 .hermes .as-btn:hover { background: var(--glass-3); }
 .hermes .as-linkcard:hover { border-color: rgba(139, 124, 255, 0.6); color: var(--text); }
 .hermes .as-voice-btn[data-primary] { background: var(--violet-text); color: var(--ink); }
+.hermes .as-voice-btn[aria-disabled='true'] { color: var(--text-2); cursor: default; }
+.hermes .as-voice { padding-top: 10px; }
 
 /* ----------------------------------------------------------------- canvas */
 
@@ -382,6 +505,9 @@ button { font: inherit; color: inherit; }
   background: #0a0d2a;
   animation: sheet-in 200ms var(--ease) both;
 }
+/* the sheet keeps a strip at the bottom for the bot, so it never sits on the view or its controls */
+.canvas[data-mode='sheet'] { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+.canvas[data-mode='sheet'] .canvas-body { border-bottom: 1px solid var(--line); }
 @keyframes canvas-in { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes sheet-in { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
 
@@ -456,6 +582,8 @@ button { font: inherit; color: inherit; }
   display: flex; flex-direction: column; gap: 6px; padding: 16px 18px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--glass-1);
 }
+.system-head h4 { display: inline-flex; align-items: center; gap: 9px; }
+.system-icon { display: inline-grid; color: var(--violet-text); }
 .system-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
 .system-state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--good); }
 .system-state .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -514,8 +642,9 @@ button { font: inherit; color: inherit; }
 }
 
 @media (max-width: 640px) {
-  .greeting { font-size: 34px; }
-  .talk-sub { font-size: 15px; }
+  .greeting { font-size: 30px; }
+  .hero-brief-slot { font-size: 16.5px; margin-top: 10px; }
+  .talk[data-empty] .talk-scroll { padding-top: 4px; padding-bottom: 16px; }
   .talk[data-empty] .talk-dock { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .hermes .as .ca-answer { font-size: 17px; }
   .hermes .as-user { max-width: 88%; }
@@ -532,4 +661,7 @@ button { font: inherit; color: inherit; }
   .workspace { transition: none; }
   .canvas[data-mode], .rail[data-mode='drawer'] { animation-name: fade-in; }
   .icon-btn, .rail-new, .rail-convo, .rail-link, .user-button, .chevron, .user-card, .hermes .as-input { transition: none; }
+  /* the orbit stands still: the ring and the beams are drawn, not running; a node lights up with a fade */
+  .orbit-ring-dash, .orbit-link[data-active], .hero-caret { animation: none; }
+  .orbit-link, .orbit-node, .orbit-name { transition: opacity 0.2s, stroke 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s; }
 }

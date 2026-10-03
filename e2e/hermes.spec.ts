@@ -1,5 +1,6 @@
 // The Hermes workspace: demo sign-in and its guard, the rail, the conversation and the canvas that shows a dashboard beside it
 // (a modal sheet below 1024px), every route's title, one h1 and accessibility, and what each view shows per role.
+// The bot: the first screen's hero with the systems orbit and the brief, the docked bot, and that it is always on screen.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,6 +20,42 @@ const rail = (page: Page) => page.locator('[data-rail]');
 const drawer = (page: Page) => page.getByRole('dialog', { name: 'Menu' });
 const dashboards = (page: Page) => page.getByRole('navigation', { name: 'Dashboards' });
 const turns = (page: Page) => conversation(page).locator('[data-turn]');
+const brief = (page: Page) => page.locator('[data-brief]');
+const systemButtons = (page: Page) => page.getByRole('button', { name: /^Ask about / });
+const MAYA_ONLY = 'Platform and Product';
+
+/**
+ * Whether a bot is on screen: inside the viewport, and the topmost thing at its middle is the bot or the button laid over it,
+ * so a sheet, a drawer or its backdrop isn't covering it.
+ */
+function botOnScreen(page: Page): Promise<boolean> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('[data-bot]')].some((bot) => {
+      const r = bot.getBoundingClientRect();
+      if (r.width < 40 || r.left < 0 || r.top < 0 || r.right > window.innerWidth || r.bottom > window.innerHeight) return false;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (bot.contains(hit) || !!hit.closest('[data-bot-host]')?.contains(bot));
+    }),
+  );
+}
+
+/** Records every state the conversation's bot shows, from now on. */
+async function recordBotStates(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __states: string[] };
+    w.__states = [];
+    const tick = () => {
+      const s = document.querySelector<HTMLElement>('[data-bot-host] [data-bot]')?.dataset.state;
+      if (s && w.__states[w.__states.length - 1] !== s) w.__states.push(s);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  return () => page.evaluate(() => (window as unknown as { __states: string[] }).__states);
+}
+
+const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 async function ask(page: Page, question: string) {
   await composer(page).fill(question);
@@ -166,6 +203,225 @@ test('mid-conversation the one h1 is a visually hidden Hermes', async ({ page })
   await expect(page.locator('h1')).toHaveText('Hermes');
   const box = await page.locator('h1').boundingBox();
   expect(box!.width * box!.height).toBeLessThanOrEqual(1);
+});
+
+// ------------------------------------------------------------------ the bot
+
+test('first screen: the bot on its pedestal among the systems, a greeting, the composer, three chips and a brief', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  const hero = page.locator('.hero [data-bot]');
+  await expect(hero).toBeVisible();
+  expect((await hero.boundingBox())!.height).toBeGreaterThanOrEqual(160);
+  await expect(page.locator('h1')).toHaveText(/^Good (morning|afternoon|evening), Maya$/);
+  await expect(systemButtons(page)).toHaveCount(6);
+  for (const name of ['Directory', 'Clockify', 'Jira', 'GitHub', 'Teams', 'AWS']) {
+    await expect(page.getByRole('button', { name: `Ask about ${name}` })).toBeVisible();
+  }
+  await expect(composer(page)).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Suggestions' }).getByRole('button')).toHaveCount(3);
+  await expect(page.locator('.glance')).toHaveCount(0);
+  await expect(brief(page)).toContainText('PRs merged', { timeout: 10_000 });
+  await expect(brief(page)).toHaveAttribute('data-brief', 'done');
+  // the brief is not an answer: no "Stopped." and no thread yet
+  await expect(turns(page)).toHaveCount(0);
+  expect(await botOnScreen(page)).toBe(true);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('the brief as Sara is about the Platform team', async ({ page }) => {
+  await signInAs(page, 'p-sara');
+  await page.goto('/hermes');
+  await expect(brief(page)).toContainText('Platform', { timeout: 10_000 });
+  await expect(brief(page)).not.toContainText(MAYA_ONLY);
+});
+
+test('while the brief reads the systems, they light up on the orbit', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await expect(page.locator('[data-system][data-active="true"]').first()).toBeAttached({ timeout: 10_000 });
+  await expect(brief(page)).toHaveAttribute('data-brief', 'done', { timeout: 10_000 });
+  await expect(page.locator('[data-system][data-active="true"]')).toHaveCount(0);
+});
+
+test('a system on the orbit asks about it', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await page.getByRole('button', { name: 'Ask about AWS' }).click();
+  await expect(conversation(page).getByText('Why did AWS costs go up?', { exact: true })).toBeVisible();
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+});
+
+test('the bot thinks, speaks, then rests as an answer comes in, and the dock names the systems it reads', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  const states = await recordBotStates(page);
+  await ask(page, 'How is the team doing?');
+  await expect(page.locator('.docked-status')).toContainText(/^Reading /);
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  await expect(page.locator('.docked-status')).toHaveCount(0);
+  await expect.poll(states).toContain('idle');
+  const seen = await states();
+  const thinking = seen.indexOf('thinking');
+  const speaking = seen.indexOf('speaking', thinking);
+  expect(thinking, `states seen: ${seen.join(' → ')}`).toBeGreaterThanOrEqual(0);
+  expect(speaking, `states seen: ${seen.join(' → ')}`).toBeGreaterThan(thinking);
+  expect(['idle', 'happy']).toContain(seen[seen.length - 1]);
+});
+
+test('clicking the docked bot puts you in the message box', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'How is the team doing?');
+  await composer(page).blur();
+  await page.getByRole('button', { name: 'Write to Hermes' }).click();
+  await expect(composer(page)).toBeFocused();
+});
+
+// Review Focus 1: at every width, on every signed-in route, the bot stays on screen, over the sheet and beside the drawer too.
+for (const width of [1280, 900, 375]) {
+  test(`the bot is always on screen at ${width}px`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'the widths are set on the desktop project');
+    test.setTimeout(150_000);
+    await page.setViewportSize({ width, height: 812 });
+    await signInAs(page, 'p-maya');
+    for (const path of HERMES_PATHS.filter((p) => p !== '/hermes/sign-in')) {
+      await page.goto(path);
+      await expect(composer(page)).toBeAttached();
+      if (width < 1024 && path !== '/hermes') {
+        // the sheet is open on arrival: the bot is above it, then close it, ask, and come back to it
+        await expect(canvas(page)).toBeVisible();
+        await settled(page);
+        expect(await botOnScreen(page), `${path}, sheet over the first screen`).toBe(true);
+        await closeCanvas(page);
+        await ask(page, 'How is the team doing?');
+        await page.goBack();
+        await expect(canvas(page)).toBeVisible();
+        await settled(page);
+      } else {
+        await ask(page, 'How is the team doing?');
+      }
+      await expect(turns(page)).toHaveCount(1);
+      expect(await botOnScreen(page), `${path} at ${width}px`).toBe(true);
+      if (width < 1024) {
+        const sheetOpen = (await canvas(page).count()) > 0;
+        if (sheetOpen) await closeCanvas(page);
+        await openRail(page);
+        expect(await botOnScreen(page), `${path} with the drawer open`).toBe(true);
+        const bot = (await page.locator('[data-bot-host] [data-bot]').boundingBox())!;
+        expect(overlaps(bot, (await drawer(page).boundingBox())!), 'the bot sits beside the drawer').toBe(false);
+        await closeRail(page);
+      }
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `${path} is wider than ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+}
+
+test('over the sheet the bot keeps clear of the close button and the view', async ({ page }) => {
+  test.skip(!narrow(page), 'the sheet is below 1024px');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/connections');
+  await expect(canvas(page)).toBeVisible();
+  await settled(page);
+  expect(await botOnScreen(page)).toBe(true);
+  const bot = (await page.locator('[data-bot-host] [data-bot]').boundingBox())!;
+  expect(overlaps(bot, (await canvas(page).getByRole('button', { name: 'Close' }).boundingBox())!)).toBe(false);
+  expect(overlaps(bot, (await canvas(page).locator('.canvas-body').boundingBox())!), 'the view scrolls above the bot').toBe(false);
+});
+
+test('Show me the team dashboard: wide, the canvas opens beside the conversation and the composer keeps focus', async ({ page }) => {
+  test.skip(narrow(page), 'the canvas opens beside the conversation from 1024px');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'Show me the team dashboard');
+  await expect(page).toHaveURL(/\/hermes\/team$/);
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Team' })).toBeAttached();
+  // Review Focus 4: the turn stays and the reply that opened it finishes
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  await expect(turns(page).getByText("Here's the Team dashboard.")).toBeVisible();
+  // Ruling R6: Hermes opening a view never takes your focus
+  await expect(composer(page)).toBeFocused();
+  await page.keyboard.type('and the projects');
+  await expect(composer(page)).toHaveValue('and the projects');
+  // closing it gives focus back to the composer, which had it
+  await closeCanvas(page);
+  await expect(composer(page)).toBeFocused();
+});
+
+test('Show me the team dashboard: narrow, the answer offers Open Team instead of covering the conversation', async ({ page, isMobile }) => {
+  if (!isMobile) await page.setViewportSize({ width: 375, height: 812 });
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'Show me the team dashboard');
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  const chip = turns(page).getByRole('link', { name: 'Open Team' });
+  await expect(chip).toBeVisible();
+  await expect(page).toHaveURL(/\/hermes$/);
+  await expect(canvas(page)).toHaveCount(0);
+  await expect(composer(page)).toBeFocused();
+  await chip.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/hermes\/team$/);
+  await expect(page.getByRole('dialog', { name: 'Team' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(canvas(page)).toHaveCount(0);
+  await expect(chip).toBeFocused();
+});
+
+test('closing the canvas returns focus to the control that opened the view now showing', async ({ page }) => {
+  test.skip(narrow(page), 'desktop rail');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await dashboards(page).getByRole('link', { name: 'Team', exact: true }).click();
+  await expect(canvas(page)).toBeFocused();
+  const projects = dashboards(page).getByRole('link', { name: 'Projects', exact: true });
+  await projects.click();
+  await expect(canvas(page)).toHaveAttribute('aria-label', 'Projects');
+  await expect(canvas(page)).toBeFocused();
+  await closeCanvas(page);
+  await expect(projects).toBeFocused();
+});
+
+// Review Focus 2: the brief racing a question, a new conversation and a user switch
+test('a question asked while the brief streams stops the brief and is answered', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await expect(brief(page)).toHaveAttribute('data-brief', /^(working|writing)$/);
+  await ask(page, 'How is the team doing?');
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  // the brief stopped: what it had said stays, with no "Stopped." note; with nothing said, it isn't shown at all
+  expect(await brief(page).evaluateAll((els) => els.map((el) => el.getAttribute('data-brief')))).toEqual(
+    expect.not.arrayContaining(['working', 'writing', 'done']),
+  );
+  await expect(conversation(page).getByText('Stopped.')).toHaveCount(0);
+  await expect(turns(page).locator('.as-stat')).toBeVisible();
+
+  await openRail(page);
+  await rail(page).getByRole('button', { name: 'New conversation' }).click();
+  await expect(page.locator('h1')).toHaveText(/^Good .*Maya$/);
+  await expect(page.locator('.hero [data-bot]')).toBeVisible();
+  await expect(brief(page)).toContainText('PRs merged', { timeout: 10_000 });
+  await openRail(page);
+  await expect(rail(page).getByRole('button', { name: 'How is the team doing?', exact: true })).toBeVisible();
+  await expect(rail(page).getByRole('button', { name: /PRs merged/ })).toHaveCount(0);
+});
+
+test('switching user mid-brief shows only the new user’s greeting and brief', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await expect(brief(page)).toHaveAttribute('data-brief', /^(working|writing)$/);
+  await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+  await expect(page.locator('h1')).toHaveText(/^Good .*Sara$/);
+  const until = Date.now() + 4000;
+  while (Date.now() < until) {
+    expect(await page.locator('body').innerText(), 'Maya’s brief came back').not.toContain(MAYA_ONLY);
+    await page.waitForTimeout(100);
+  }
+  await expect(brief(page)).toContainText('the Platform team', { timeout: 10_000 });
+  await expect(brief(page)).toHaveCount(1);
 });
 
 // ------------------------------------------------------------------ layout and routing

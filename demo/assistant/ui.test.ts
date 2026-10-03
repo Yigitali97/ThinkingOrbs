@@ -7,7 +7,7 @@ import type { ConversationSnapshot, Turn } from './conversation';
 import type { ReplyState } from '../chat-app/activity';
 import { createAssistantReply } from './reply';
 import { dockState, isOpenShortcut } from './shortcuts';
-import { foldTools } from './Thread';
+import { briefShown, foldTools } from './Thread';
 import { applyAssistantEvent, finishAssistantReply } from './reply';
 import { summarize } from '../chat-app/activity';
 
@@ -103,6 +103,25 @@ describe('marksUnread', () => {
     expect(marksUnread(true, finished('done'), { open: false, inline: true })).toBe(false);
     expect(marksUnread(false, finished('done'), { open: false, inline: false })).toBe(false);
     expect(marksUnread(true, snap(['writing'], true), { open: false, inline: false })).toBe(false);
+  });
+
+  it('does not mark the brief: it is not an answer to anything you asked', () => {
+    const s = snap(['done']);
+    const briefed = { ...s, turns: [{ ...s.turns[0], question: '', brief: true }] };
+    expect(marksUnread(true, briefed, { open: false, inline: false })).toBe(false);
+  });
+});
+
+describe('briefShown', () => {
+  const brief = (state: ReplyState, text: string): Turn => ({ ...turn(state), question: '', brief: true, reply: { ...turn(state).reply, text } });
+  it('shows a brief that said something, however it ended', () => {
+    expect(briefShown(brief('done', 'Three PRs merged.'))).toBe(true);
+    expect(briefShown(brief('stopped', 'This week'))).toBe(true);
+  });
+  it('hides a brief with nothing to say: stopped before a word, or every system down', () => {
+    expect(briefShown(brief('stopped', ''))).toBe(false);
+    expect(briefShown(brief('done', ''))).toBe(false);
+    expect(briefShown(brief('error', ' '))).toBe(false);
   });
 });
 

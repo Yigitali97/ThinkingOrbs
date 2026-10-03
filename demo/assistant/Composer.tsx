@@ -1,6 +1,7 @@
 // The assistant's message box: attachments, dictation, and Send (Stop while a reply runs). Enter sends, Shift+Enter is a new line.
 // Sending while a reply runs stops that reply first; the conversation store takes care of the order. The draft and uploads
 // live in AssistantProvider, so they survive this box unmounting. Whether dictation is on is reported there too, for the bot.
+// `voiceOrb={false}` leaves the orb out of voice mode, for a site whose bot shows what voice mode is doing.
 
 import { KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from 'react';
 import { VoiceOrb } from '../../src/orbs';
@@ -18,7 +19,15 @@ export function focusComposer(): boolean {
 
 const MAX_HEIGHT = 160;
 
-export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElement> }) {
+export interface ComposerProps {
+  inputRef?: RefObject<HTMLTextAreaElement>;
+  /** false leaves the orb out of voice mode */
+  voiceOrb?: boolean;
+  /** replaces "Ask <agent> anything", e.g. with something shorter where the box is narrow */
+  placeholder?: string;
+}
+
+export function Composer({ inputRef, voiceOrb = true, placeholder }: ComposerProps) {
   const { agent, conversation, snapshot, setDictating } = useAssistant();
   const { draft, setDraft, uploads, attachFiles, removeUpload, takeReady } = useComposerDraft();
   const dictation = useDictation(setDraft);
@@ -28,7 +37,8 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
   const ownRef = useRef<HTMLTextAreaElement>(null);
   const textRef = inputRef ?? ownRef;
   const errorId = useId();
-  const busy = snapshot.busy;
+  // the agent's own brief can be talked over: Send stays, and sending stops it; Stop is for answers you asked for
+  const busy = snapshot.busy && !snapshot.turns[snapshot.turns.length - 1]?.brief;
   const uploading = uploads.some((u) => u.status !== 'done');
   const canSend = !uploading && (draft.trim().length > 0 || uploads.some((u) => u.status === 'done'));
 
@@ -70,7 +80,7 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
   if (voice) {
     return (
       <div className="as-composer">
-        <VoiceMode onEnd={() => setVoice(false)} />
+        <VoiceMode onEnd={() => setVoice(false)} orb={voiceOrb} />
       </div>
     );
   }
@@ -125,7 +135,7 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKey}
-          placeholder={dictation.active ? 'Listening…' : `Ask ${agent.name} anything`}
+          placeholder={dictation.active ? 'Listening…' : placeholder ?? `Ask ${agent.name} anything`}
           aria-label={`Ask ${agent.name}`}
           aria-describedby={dictation.error ? errorId : undefined}
           data-assistant-composer=""

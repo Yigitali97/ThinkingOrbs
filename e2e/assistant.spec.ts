@@ -181,6 +181,9 @@ test('while voice mode thinks or speaks, the orb can be reached and pressed from
   await panel(page).getByRole('button', { name: 'Voice mode' }).click();
   const voice = panel(page).locator('.as-voice');
   await expect(voice).toHaveAttribute('data-state', /thinking|speaking/);
+  // in Hermes the bot is the voice orb: it shows what voice mode is doing, and voice mode draws no orb of its own
+  await expect(page.locator('[data-bot]').first()).toHaveAttribute('data-state', /thinking|speaking/);
+  await expect(voice.locator('.as-voice-orb')).toHaveCount(0);
   // from End voice mode, step back past Mute to the orb
   await expect(panel(page).getByRole('button', { name: 'End voice mode' })).toBeFocused();
   await page.keyboard.press('Shift+Tab');

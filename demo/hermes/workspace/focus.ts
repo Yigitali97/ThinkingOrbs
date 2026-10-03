@@ -1,5 +1,5 @@
-// What the workspace's modal parts share: whether the screen is wide enough for the side-by-side layout, and keeping Tab
-// inside a drawer or sheet while it is modal.
+// What the workspace's modal parts share: whether the screen is wide enough for the side-by-side layout (or matches another
+// media query), and keeping Tab inside a drawer or sheet while it is modal.
 
 import { useCallback, useSyncExternalStore } from 'react';
 import type { KeyboardEvent } from 'react';
@@ -7,18 +7,29 @@ import type { KeyboardEvent } from 'react';
 /** From here up the rail and canvas sit beside the conversation; below it they are a drawer and a sheet. */
 export const WIDE_QUERY = '(min-width: 1024px)';
 
-export function useWide(): boolean {
-  const subscribe = useCallback((fn: () => void) => {
-    if (typeof window === 'undefined' || !window.matchMedia) return () => {};
-    const mq = window.matchMedia(WIDE_QUERY);
-    mq.addEventListener('change', fn);
-    return () => mq.removeEventListener('change', fn);
-  }, []);
+/** Phones: the bot and the hero get smaller. */
+export const PHONE_QUERY = '(max-width: 640px)';
+
+/** Whether a media query matches now; `fallback` without a window (prerendering). */
+export function useMedia(query: string, fallback: boolean): boolean {
+  const subscribe = useCallback(
+    (fn: () => void) => {
+      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      const mq = window.matchMedia(query);
+      mq.addEventListener('change', fn);
+      return () => mq.removeEventListener('change', fn);
+    },
+    [query],
+  );
   return useSyncExternalStore(
     subscribe,
-    () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE_QUERY).matches : true),
-    () => true,
+    () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : fallback),
+    () => fallback,
   );
+}
+
+export function useWide(): boolean {
+  return useMedia(WIDE_QUERY, true);
 }
 
 const FOCUSABLE = [

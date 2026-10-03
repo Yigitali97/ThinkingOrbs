@@ -1,19 +1,20 @@
-// The conversation, always mounted while signed in. Empty, it greets you by name (the screen's h1) over a centred composer
-// and suggestions; once you have asked something, the h1 is a visually hidden "Hermes" and the composer pins to the bottom.
-// The bot hero, systems orbit, brief and docked bot arrive in a later step; this keeps the h1 rule and the composer's place.
+// The conversation, always mounted while signed in. Empty (or holding only the brief) it is the hero: the bot among its
+// systems, the greeting as the screen's h1, the brief, a centred composer and chips. Once you ask something the h1 is a
+// visually hidden "Hermes", the thread fills the column and the composer pins to the bottom with the bot docked beside it.
+// It starts the brief once per conversation: on arrival, after New conversation, and for a new user.
 
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useAssistant } from '../../assistant/AssistantProvider';
 import { Composer } from '../../assistant/Composer';
+import type { Turn } from '../../assistant/conversation';
 import { Suggestions, Thread } from '../../assistant/Thread';
 import { usePageContext } from '../../assistant/usePageContext';
-import { firstName } from '../views/shared';
-import { hermesNow } from '../store';
-
-export function greeting(now: Date): string {
-  const hour = now.getHours();
-  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-}
+import { Link } from '../../site/router';
+import { DockedBot } from './DockedBot';
+import type { Overlay } from './DockedBot';
+import { PHONE_QUERY, useMedia } from './focus';
+import { Hero } from './Hero';
+import { canvasFor } from './views';
 
 /** What "this one" refers to with no canvas open: the conversation itself. */
 function HomeContext() {
@@ -21,11 +22,28 @@ function HomeContext() {
   return null;
 }
 
-export function ConversationArea({ canvasOpen }: { canvasOpen: boolean }) {
-  const { user, snapshot } = useAssistant();
+export interface ConversationAreaProps {
+  canvasOpen: boolean;
+  /** below 1024px, what covers the conversation: the canvas sheet or the rail drawer */
+  overlay: Overlay;
+  /** closes that overlay, for the bot riding above it */
+  onLeaveOverlay: () => void;
+  /** views Hermes offered to open, by turn: below 1024px they are links in the answer instead of a sheet over it */
+  offers: Readonly<Record<string, string>>;
+}
+
+export function ConversationArea({ canvasOpen, overlay, onLeaveOverlay, offers }: ConversationAreaProps) {
+  const { user, snapshot, conversation } = useAssistant();
   const asked = snapshot.turns.some((t) => !t.brief);
+  const phone = useMedia(PHONE_QUERY, false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+
+  // the brief, once per conversation; the store refuses a second one until the next clear()
+  const empty = snapshot.turns.length === 0;
+  useEffect(() => {
+    if (empty) void conversation.startBrief();
+  }, [conversation, empty]);
 
   // follow the answer as it streams, unless you have scrolled up to read; a new question always follows
   const count = snapshot.turns.length;
@@ -36,6 +54,18 @@ export function ConversationArea({ canvasOpen }: { canvasOpen: boolean }) {
     const el = scrollRef.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [snapshot]);
+
+  const offer = (t: Turn) => {
+    const href = offers[t.id];
+    const view = href && user ? canvasFor(href, user) : null;
+    return view ? (
+      <p className="open-offer">
+        <Link to={href} className="open-chip">
+          Open {view.title}
+        </Link>
+      </p>
+    ) : null;
+  };
 
   return (
     <div className="talk" data-empty={!asked || undefined}>
@@ -52,22 +82,22 @@ export function ConversationArea({ canvasOpen }: { canvasOpen: boolean }) {
           <>
             <h1 className="sr-only">Hermes</h1>
             <div className="talk-column">
-              <Thread turns={snapshot.turns} />
+              <Thread turns={snapshot.turns} after={offer} />
             </div>
           </>
         ) : (
-          <div className="talk-hello">
-            <h1 className="greeting">
-              {greeting(hermesNow())}, {firstName(user)}
-            </h1>
-            <p className="talk-sub">Ask about the team, hours, projects, code, Teams or AWS. Dashboards open beside the conversation.</p>
-          </div>
+          <Hero />
         )}
       </div>
       <div className="talk-dock">
-        <div className="talk-column">
-          <Composer />
-          {!asked && <Suggestions />}
+        <div className="talk-column dock-row">
+          {/* on the first screen the hero is the bot, unless a sheet or drawer covers it */}
+          {(asked || overlay) && <DockedBot overlay={overlay} onLeaveOverlay={onLeaveOverlay} />}
+          <div className="dock-main">
+            {/* beside the docked bot a phone's box is narrow: a shorter placeholder that fits */}
+            <Composer voiceOrb={false} placeholder={asked && phone ? 'Ask Hermes' : undefined} />
+            {!asked && <Suggestions />}
+          </div>
         </div>
       </div>
     </div>

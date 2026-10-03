@@ -8,50 +8,32 @@ import { int, seeded } from '../../assistant/random';
 import { usePageContext } from '../../assistant/usePageContext';
 import { HERMES_SEED } from '../config';
 import { hermesNow } from '../store';
+import { HERMES_SYSTEMS } from '../workspace/systems';
+import type { HermesSystemName } from '../workspace/systems';
 
-interface System {
-  /** the `system` name the tools carry, so an outage here is an outage for the assistant */
-  name: string;
-  reads: (role: Role) => string;
-}
-
-const SYSTEMS: System[] = [
-  {
-    name: 'Directory',
-    reads: (role) =>
-      role === 'developer'
-        ? 'People, titles, teams and weekly capacity, and your team’s projects.'
-        : 'People, titles, teams and weekly capacity, and every project with its budget.',
-  },
-  {
-    name: 'Clockify',
-    reads: (role) =>
-      role === 'leadership'
-        ? 'Everyone’s time entries.'
-        : role === 'manager'
-          ? 'Time entries for your team, and other teams as totals.'
-          : 'Your own time entries, and your team’s total.',
-  },
-  {
-    name: 'Jira',
-    reads: (role) => `Issues, blockers and sprints${role === 'developer' ? ' for your team’s projects' : ' for every project'}.`,
-  },
-  {
-    name: 'GitHub',
-    reads: (role) => `Pull requests, reviews and commits${role === 'developer' ? ' in your team’s repositories' : ' in every repository'}.`,
-  },
-  { name: 'Teams', reads: () => 'Messages in #backend, #product and #general, and standup and planning notes.' },
-  {
-    name: 'AWS',
-    reads: (role) => (role === 'leadership' ? 'Monthly costs by service, and service health.' : 'Service health. Costs are visible to leadership.'),
-  },
-];
+/** What Hermes may read in each system for a role. The names are the `system` the tools carry, so an outage here is one for Hermes. */
+const READS: Record<HermesSystemName, (role: Role) => string> = {
+  Directory: (role) =>
+    role === 'developer'
+      ? 'People, titles, teams and weekly capacity, and your team’s projects.'
+      : 'People, titles, teams and weekly capacity, and every project with its budget.',
+  Clockify: (role) =>
+    role === 'leadership'
+      ? 'Everyone’s time entries.'
+      : role === 'manager'
+        ? 'Time entries for your team, and other teams as totals.'
+        : 'Your own time entries, and your team’s total.',
+  Jira: (role) => `Issues, blockers and sprints${role === 'developer' ? ' for your team’s projects' : ' for every project'}.`,
+  GitHub: (role) => `Pull requests, reviews and commits${role === 'developer' ? ' in your team’s repositories' : ' in every repository'}.`,
+  Teams: () => 'Messages in #backend, #product and #general, and standup and planning notes.',
+  AWS: (role) => (role === 'leadership' ? 'Monthly costs by service, and service health.' : 'Service health. Costs are visible to leadership.'),
+};
 
 const LATER = ['Slack', 'Google Drive', 'Salesforce'];
 
 // minutes since each system last synced: seeded, so every load shows the same
 const rng = seeded(HERMES_SEED);
-const SYNC_OFFSETS = SYSTEMS.map(() => int(rng, 2, 9));
+const SYNC_OFFSETS = HERMES_SYSTEMS.map(() => int(rng, 2, 9));
 const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export function Connections() {
@@ -72,20 +54,23 @@ export function Connections() {
       <section className="view-section">
         <h3>Company systems</h3>
         <ul className="systems">
-          {SYSTEMS.map((s, i) => {
+          {HERMES_SYSTEMS.map((s, i) => {
             const isDown = down.has(s.name);
             const synced = now - SYNC_OFFSETS[i] * 60_000;
             const checkbox = `outage-${s.name.toLowerCase()}`;
             return (
               <li key={s.name} className="system" data-down={isDown || undefined}>
                 <div className="system-head">
-                  <h4>{s.name}</h4>
+                  <h4>
+                    <span className="system-icon">{s.icon}</span>
+                    {s.name}
+                  </h4>
                   <span className="system-state">
                     <span className="dot" aria-hidden="true" />
                     {isDown ? 'Outage (simulated)' : 'Connected'}
                   </span>
                 </div>
-                <p className="system-reads">{s.reads(role)}</p>
+                <p className="system-reads">{READS[s.name](role)}</p>
                 <p className="muted">
                   Last sync <time dateTime={new Date(synced).toISOString()}>{clock.format(synced)}</time> ({SYNC_OFFSETS[i]} min ago)
                 </p>

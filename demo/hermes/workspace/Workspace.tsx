@@ -1,16 +1,18 @@
 // The signed-in Hermes workspace: the rail, the conversation and, when the address names one, a dashboard in the canvas.
 // One assistant provider sits above it all, so a canvas change never unmounts the conversation or stops a reply.
-// `/` and Cmd/Ctrl+K go to the composer; Hermes's `open` events navigate, which opens the canvas.
+// `/` and Cmd/Ctrl+K go to the composer. Hermes's `open` events open the canvas beside the conversation from 1024px without
+// taking your focus; below that they become an "Open <view>" link in the answer, because the sheet would cover what you are reading.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AssistantProvider } from '../../assistant/AssistantProvider';
+import type { MutableRefObject } from 'react';
+import { AssistantProvider, useAssistant } from '../../assistant/AssistantProvider';
 import { focusComposer } from '../../assistant/Composer';
 import type { User } from '../../assistant/protocol';
 import { isOpenShortcut } from '../../assistant/shortcuts';
 import { ErrorBoundary } from '../../site/ErrorBoundary';
 import { navigate, normalisePath, useLocation } from '../../site/router';
 import { hermesAgent } from '../agent/definition';
-import { HERMES_NAME } from '../config';
+import { HERMES_NAME, HERMES_ROOT } from '../config';
 import { hermesNow } from '../store';
 import { Canvas } from './Canvas';
 import { ConversationArea } from './ConversationArea';
@@ -29,17 +31,50 @@ function readCollapsed(): boolean {
   }
 }
 
-function Layout({ user }: { user: User }) {
+type OpenHandler = (href: string) => void;
+
+function Layout({ user, openRef }: { user: User; openRef: MutableRefObject<OpenHandler> }) {
+  const { conversation } = useAssistant();
   const loc = useLocation();
   const path = normalisePath(loc.path);
   const wide = useWide();
   const canvas = canvasFor(path, user);
+  const wideRef = useRef(wide);
+  wideRef.current = wide;
+
+  // Ruling R6: what Hermes opens never takes your focus. Wide, the address it opened is remembered so the canvas stays quiet
+  // there; any other address (a link, back, forward) is yours and moves focus. Narrow, it is offered on the turn instead.
+  const agentPath = useRef<string | null>(null);
+  const [offers, setOffers] = useState<Record<string, string>>({});
+  useEffect(() => setOffers({}), [conversation]);
+  useEffect(() => {
+    if (agentPath.current !== path) agentPath.current = null;
+  }, [path]);
+  openRef.current = (href) => {
+    if (wideRef.current) {
+      agentPath.current = normalisePath(href);
+      // the event arrives inside the brain's emit: navigate after it returns, and never let a router error break the reply
+      queueMicrotask(() => {
+        try {
+          navigate(href);
+        } catch {
+          // the answer still says where to look; the canvas just doesn't open
+          agentPath.current = null;
+        }
+      });
+      return;
+    }
+    const turns = conversation.getSnapshot().turns;
+    const turn = turns[turns.length - 1];
+    if (turn) setOffers((o) => ({ ...o, [turn.id]: href }));
+  };
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
   const menuRef = useRef<HTMLButtonElement>(null);
   const sheet = !wide && !!canvas;
   const modal = useRef(false);
   modal.current = (!wide && drawer) || sheet;
+  const overlay = wide ? null : drawer ? 'drawer' : sheet ? 'sheet' : null;
 
   // the drawer exists only below 1024px, and a navigation (picking a dashboard) closes it
   useEffect(() => {
@@ -51,6 +86,14 @@ function Layout({ user }: { user: User }) {
     setDrawer(false);
     if (refocus) setTimeout(() => menuRef.current?.focus(), 0);
   }, []);
+
+  // the bot riding above a drawer or sheet takes you back to the conversation
+  const leaveOverlay = useCallback(() => {
+    if (drawer) {
+      setDrawer(false);
+      setTimeout(() => focusComposer(), 0);
+    } else navigate(HERMES_ROOT);
+  }, [drawer]);
 
   const toggleCollapsed = () =>
     setCollapsed((c) => {
@@ -114,13 +157,14 @@ function Layout({ user }: { user: User }) {
 
       <main id="main" className="stage" tabIndex={-1}>
         <section className="conversation as" aria-label="Conversation">
-          <ConversationArea canvasOpen={!!canvas} />
+          <ConversationArea canvasOpen={!!canvas} overlay={overlay} onLeaveOverlay={leaveOverlay} offers={offers} />
         </section>
       </main>
 
       {canvas && (
         <Canvas
           title={canvas.title}
+          quiet={agentPath.current === path}
           view={
             <ErrorBoundary key={path} level={2}>
               {canvas.view}
@@ -133,20 +177,13 @@ function Layout({ user }: { user: User }) {
 }
 
 export function Workspace({ user }: { user: User }) {
-  // an `open` event arrives inside the brain's emit: navigate after it returns, and never let a router error break the reply
-  const onOpen = useCallback((href: string) => {
-    queueMicrotask(() => {
-      try {
-        navigate(href);
-      } catch {
-        // the answer still says where to look; the canvas just doesn't open
-      }
-    });
-  }, []);
+  // the layout knows the width and the turns, so it decides what an `open` does; this stable callback hands it over
+  const openRef = useRef<OpenHandler>(() => {});
+  const onOpen = useCallback((href: string) => openRef.current(href), []);
 
   return (
     <AssistantProvider agent={hermesAgent} user={user} now={hermesNow} onOpen={onOpen}>
-      <Layout user={user} />
+      <Layout user={user} openRef={openRef} />
     </AssistantProvider>
   );
 }

@@ -13,11 +13,13 @@ import { createConversation } from './conversation';
 import type { Conversation, ConversationSnapshot } from './conversation';
 import type { AgentDefinition, PageContext, User } from './protocol';
 
-/** What voice mode is doing, while it is on: its orb state and the microphone stream. */
+/** What voice mode is doing, while it is on: its orb state, the microphone stream, and a way to cut the assistant short. */
 export interface VoicePresence {
   active: boolean;
   state?: AssistantState;
   stream?: MediaStream | null;
+  /** stops the answer being thought about or spoken, so a bot drawn elsewhere can be the voice control */
+  interrupt?: () => void;
 }
 
 export interface AssistantValue {
@@ -77,10 +79,13 @@ export function usePageRegistry(): PageRegistry {
   return registry;
 }
 
-/** A reply that just finished, in any way but being stopped, while its answer is not on screen. Errors count, so they get noticed. */
+/**
+ * A reply that just finished, in any way but being stopped, while its answer is not on screen. Errors count, so they get noticed.
+ * The brief doesn't: nobody asked for it.
+ */
 export function marksUnread(wasBusy: boolean, s: ConversationSnapshot, view: { open: boolean; inline: boolean }): boolean {
   const last = s.turns[s.turns.length - 1];
-  return wasBusy && !s.busy && !!last && last.reply.state !== 'stopped' && !view.open && !view.inline;
+  return wasBusy && !s.busy && !!last && !last.brief && last.reply.state !== 'stopped' && !view.open && !view.inline;
 }
 
 const unknownPage = (): PageContext => ({ page: 'unknown', title: typeof document === 'undefined' ? '' : document.title });
