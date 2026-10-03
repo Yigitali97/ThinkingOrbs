@@ -7,8 +7,8 @@ import { ChatApp } from '../../chat-app/ChatApp';
 import { AgentRun } from '../../examples/AgentRun';
 import { AskFlow } from '../../examples/AskFlow';
 import { VoiceAssistant } from '../../voice-assistant/VoiceAssistant';
-import { Link, useLocation } from '../router';
-import { COMPONENTS, ExampleMeta, EXAMPLES } from '../routes';
+import { href, Link, useLocation } from '../router';
+import { COMPONENTS, ExampleMeta, EXAMPLES, SITE_LINKS } from '../routes';
 import { CodeBlock } from '../ui';
 
 const slugFor = (name: string) => COMPONENTS.find((c) => c.name === name)?.slug;
@@ -180,6 +180,20 @@ export function ExamplesPage() {
       {EXAMPLES.map((e) => (
         <ExampleSection key={e.slug} meta={e} />
       ))}
+      <section className="sites" aria-labelledby="full-sites-title">
+        <h2 id="full-sites-title">Full sites</h2>
+        <p>Whole products built on the orbs. They open as their own site, outside these docs.</p>
+        <ul className="site-cards">
+          {SITE_LINKS.map((l) => (
+            <li key={l.name}>
+              <a className="site-card" href={href(l.href)} style={{ '--tint': l.tint } as CSSProperties}>
+                <strong>{l.name}</strong>
+                <span>{l.summary}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

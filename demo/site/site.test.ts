@@ -3,7 +3,7 @@ import { ENTRIES } from '../playground/registry';
 import { DOCS } from './docs';
 import { highlight } from './highlight';
 import { isActive, normalisePath, parseHref, stripBase } from './router';
-import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta } from './routes';
+import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta, SITE_LINKS } from './routes';
 import { withMeta } from '../../vite.config';
 import { COMPANY } from '../hermes/store';
 import { HERMES_PATHS, hermesPageMeta, hermesProjectId } from '../hermes/routes';
@@ -39,6 +39,15 @@ describe('routes', () => {
   it('only names real orbs in examples', () => {
     const names = new Set(COMPONENTS.map((c) => c.name));
     for (const e of EXAMPLES) for (const used of e.uses) expect(names.has(used), `${e.slug}: ${used}`).toBe(true);
+  });
+});
+
+describe('site links', () => {
+  it('links the Hermes site, which lives outside the docs app', () => {
+    expect(SITE_LINKS).toHaveLength(1);
+    expect(SITE_LINKS[0].href).toBe('/hermes/');
+    expect(SITE_LINKS[0].name).toBe('Hermes');
+    expect(SITE_LINKS[0].tint).toMatch(/^#[0-9a-f]{6}$/i);
   });
 });
 

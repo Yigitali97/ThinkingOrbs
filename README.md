@@ -30,6 +30,7 @@ const mic = useMicrophone();
 - [Shared conventions](#shared-conventions)
 - [Using an orb without React](#using-an-orb-without-react)
 - [Demo & development](#demo--development)
+- [AI-native sites](#ai-native-sites)
 - [Project structure](#project-structure)
 
 ---
@@ -541,6 +542,47 @@ The demo's sample images and video frames are drawn in code (`demo/samples.ts`),
 ```bash
 BASE_PATH=/ThinkingOrbs/ npm run build
 ```
+
+## AI-native sites
+
+**Hermes** (`demo/hermes/`) is a demo of a site that is an assistant first and pages second. It is the internal portal of a made-up company, Brightline Labs, whose AI assistant, Hermes, is connected to the company's systems: AWS, Jira, Teams, Clockify and GitHub. The assistant is docked on every page, keeps the conversation as you move around, knows which page you are on, and answers in the form that fits the question: text, a table, a chart, a status card, or a drafted Teams message or email. Typing, dictation and a hands-free voice mode are all supported, and the orbs show what it is doing.
+
+```bash
+npm run dev
+```
+
+Then open http://localhost:5318/hermes/. You are asked to sign in as one of three demo users, and the role decides what Hermes will show:
+
+| User | Role | Sees |
+|---|---|---|
+| Maya Chen, CTO | Leadership | everything: all projects, every person's hours, AWS costs |
+| Daniel Okafor, Engineering Manager | Manager | all projects, individual hours for his own team (Platform) and team totals for the others; no AWS costs |
+| Sara Lindqvist, Developer | Developer | her team's projects, her own hours and her team's total; no one else's hours, no AWS costs |
+
+When a question reaches something a role may not see, Hermes says what is held back and offers what it can show instead. Try "How many hours did developers work this week?" as each user.
+
+The site is built in three layers, each knowing nothing about the one above it:
+
+| Layer | Folder | Holds |
+|---|---|---|
+| Site and agent | `demo/hermes/` | the pages, the generated company data, the tools, the role policy and the brain |
+| Shared assistant shell | `demo/assistant/` | dock, panel, composer, voice mode, answer blocks, conversation state, tool runner and the event protocol; no data and no domain knowledge |
+| ThinkingOrbs | `src/orbs/` | the orbs |
+
+The shell never imports from `demo/hermes/`, so it is site-agnostic: a second agent with its own tools and scope, such as a fleet-management assistant, can reuse it by supplying another `AgentDefinition`.
+
+**Plugging in real systems.** The brain, tools, policy and sign-in sit behind interfaces in `demo/assistant/protocol.ts`, so replacing them does not change the UI:
+
+- **Model.** Replace the `brain` (the `Brain` type) with one that calls your server, which calls a real model with the agent's tools as tool definitions and streams `AssistantEvent`s back.
+- **Connectors.** Implement `Tool.run` on a server for AWS, Jira, Microsoft Graph (Teams), Clockify and GitHub, keeping the same tool ids and output shapes.
+- **Policy.** Enforce the role rules (`Policy.before` and `Policy.after`) on the server, on the same tool calls. The list of tools given to an agent is its permission boundary.
+- **Identity.** Put a real identity provider behind `demo/hermes/auth.ts`, and take each user's role from your directory.
+
+The design is in `docs/superpowers/specs/2026-10-03-ai-native-sites-design.md` (section 9 covers this).
+
+**What this demo is not.** Every number, person, ticket and message is generated in the browser from a fixed seed, so nothing leaves it and it works offline with no API key. The brain matches questions to a fixed set of intents rather than calling a model. Hermes is read-only: it never writes to any system, and its drafts are labelled "Demo — not sent". Sign-in is a picker for the three demo users, not real authentication.
+
+---
 
 ---
 
