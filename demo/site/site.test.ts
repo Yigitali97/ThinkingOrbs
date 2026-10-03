@@ -5,6 +5,8 @@ import { highlight } from './highlight';
 import { isActive, normalisePath, parseHref, stripBase } from './router';
 import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta } from './routes';
 import { withMeta } from '../../vite.config';
+import { COMPANY } from '../hermes/store';
+import { HERMES_PATHS, hermesPageMeta } from '../hermes/routes';
 import * as orbs from '../../src/orbs';
 
 describe('routes', () => {
@@ -125,5 +127,35 @@ describe('prerendered pages', () => {
     expect(html).toContain('<meta name="description" content="Desc" />');
     expect(html).toContain('<meta property="og:title" content="A &lt;b&gt; &amp; &quot;c&quot;" />');
     expect(html).not.toContain('old');
+  });
+});
+
+describe('Hermes routes', () => {
+  it('has a title and description for every path, with no duplicates', () => {
+    for (const path of HERMES_PATHS) {
+      const meta = hermesPageMeta(path);
+      expect(meta, path).not.toBeNull();
+      expect(meta!.title, path).toMatch(/Hermes/);
+      expect(meta!.description.length, path).toBeGreaterThan(20);
+    }
+    expect(new Set(HERMES_PATHS).size).toBe(HERMES_PATHS.length);
+  });
+
+  it('titles pages "<Page> · Hermes" and the home page with its promise', () => {
+    expect(hermesPageMeta('/hermes')!.title).toBe('Hermes: ask anything about Brightline Labs');
+    expect(hermesPageMeta('/hermes/team')!.title).toBe('Team · Hermes');
+    expect(hermesPageMeta('/hermes/projects/atlas')!.title).toBe('Atlas · Hermes');
+  });
+
+  it('knows exactly the projects of the generated company', () => {
+    const projectPaths = HERMES_PATHS.filter((p) => p.startsWith('/hermes/projects/'));
+    expect(projectPaths.sort()).toEqual(COMPANY.projects.map((p) => `/hermes/projects/${p.id}`).sort());
+  });
+
+  it('treats trailing slashes as the same page and unknown paths as missing', () => {
+    expect(hermesPageMeta('/hermes/')).toEqual(hermesPageMeta('/hermes'));
+    expect(hermesPageMeta('/hermes/nope')).toBeNull();
+    expect(hermesPageMeta('/hermes/projects/zephyr')).toBeNull();
+    expect(hermesPageMeta('/nope')).toBeNull();
   });
 });

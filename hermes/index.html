@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101216" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Hermes: ask anything about Brightline Labs</title>
+    <meta name="description" content="Hermes is the Brightline Labs company assistant: ask about hours, tickets, pull requests, meetings and costs, and get answers that respect your role. A demo with sample data." />
+    <meta property="og:title" content="Hermes: ask anything about Brightline Labs" />
+    <meta property="og:description" content="Hermes is the Brightline Labs company assistant: ask about hours, tickets, pull requests, meetings and costs, and get answers that respect your role. A demo with sample data." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      /* paint the right background before the CSS bundle arrives */
+      :root { color-scheme: light dark; }
+      html, body { background: #f6f7f9; color: #15171c; }
+      @media (prefers-color-scheme: dark) { html, body { background: #101216; color: #e8e9ee; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <p style="font: 16px/1.6 system-ui, sans-serif; padding: 48px 24px; max-width: 560px; margin: 0 auto">
+        Hermes is a demo of a company assistant, and it runs in your browser, so it needs JavaScript. The source is on
+        <a href="https://github.com/Yigitali97/ThinkingOrbs">GitHub</a>.
+      </p>
+    </noscript>
+    <script type="module" src="/demo/hermes/main.tsx"></script>
+  </body>
+</html>
