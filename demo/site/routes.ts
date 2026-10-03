@@ -80,7 +80,7 @@ export interface PageMeta {
   description: string;
 }
 
-/** Paths that show the first component's page: the site opens on it. */
+/** Paths that show the components page from the top: the site opens on it. */
 export const isHome = (path: string) => path === '/' || path === '/components';
 
 const strip = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : path);
@@ -88,7 +88,7 @@ const strip = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : pa
 /** Title and description for a path, or null when no page exists there. */
 export function pageMeta(rawPath: string): PageMeta | null {
   const path = strip(rawPath);
-  // the site opens on the first component's page
+  // the site opens on the components
   if (path === '/' || path === '/components') return { title: `${SITE_NAME}: animated orbs for AI interfaces`, description: SITE_DESCRIPTION };
   if (path === '/examples')
     return { title: `Examples · ${SITE_NAME}`, description: 'Complete samples built from the orbs: a chat app, a voice assistant, an agent run and an ask-and-answer flow.' };

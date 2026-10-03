@@ -1,4 +1,4 @@
-// Live demos for the component pages, and small previews for the gallery.
+// Live demos for each component on the components page, and small previews for the gallery.
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {

@@ -213,8 +213,19 @@ h3 { font: 600 16px/1.3 var(--display); }
 .doc-title { font-family: var(--mono) !important; font-weight: 600 !important; letter-spacing: -0.03em !important; }
 .doc section { margin-top: 48px; }
 .doc section > h2 { margin: 0 0 14px; }
-.doc .doc-demo { margin-top: 0; }
-.doc-links { margin-top: 14px; }
+.doc-links { margin: 14px 0 16px; }
+
+/* the components page: one section per orb, its reference folded under the demo */
+.doc .component { padding-top: 56px; margin-top: 56px; border-top: 1px solid var(--line); }
+.doc .component:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+.component-head { max-width: 720px; margin-bottom: 24px; }
+.component-head .crumb { margin-bottom: 6px; }
+.component-head h2 { margin: 0 0 10px; font: 600 28px/1.15 var(--mono); letter-spacing: -0.03em; }
+.component-head h2::before {
+  content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 12px; border-radius: 50%;
+  background: var(--tint); vertical-align: 0.15em;
+}
+.component-head > p:last-child { margin: 0; color: var(--muted); font-size: 16px; max-width: 66ch; }
 
 .demo {
   position: relative;
@@ -274,17 +285,6 @@ h3 { font: 600 16px/1.3 var(--display); }
 .notes { margin: 0; padding-left: 20px; color: var(--text-soft); }
 .notes li + li { margin-top: 6px; }
 .notes li::marker { color: var(--tint); }
-
-.pager { display: flex; justify-content: space-between; gap: 14px; margin-top: 64px; }
-.pager a {
-  display: flex; flex-direction: column; gap: 2px;
-  min-width: 180px; padding: 14px 18px;
-  border: 1px solid var(--line); border-radius: var(--radius-lg);
-  font-family: var(--mono); font-size: 14px; text-decoration: none;
-}
-.pager a:hover { border-color: var(--line-strong); }
-.pager a span { color: var(--faint); font: 12.5px/1.4 var(--sans); }
-.pager-next { text-align: right; margin-left: auto; }
 
 /* ----------------------------------------------------------------- examples */
 
@@ -385,17 +385,17 @@ h3 { font: 600 16px/1.3 var(--display); }
   .sidebar ul { display: flex; gap: 2px; }
   .sidebar a, .sidebar a[aria-current='page'] { border-left: 0; padding: 5px 10px; margin: 0; border-radius: 8px; white-space: nowrap; }
   .sidebar a[aria-current='page'] { background: var(--raised); box-shadow: inset 0 -2px 0 var(--tint); }
-  /* examples: the list stays pinned under the top bar so the active one is always visible */
-  .page-examples .sidebar {
+  /* one-page lists: the sidebar stays pinned under the top bar so the active section is always visible */
+  .page-sections .sidebar {
     position: sticky; top: 60px; z-index: 10; padding-top: 10px;
     background: color-mix(in srgb, var(--ink) 92%, transparent);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   }
-  .page-examples .sidebar h2 { display: none; }
+  .page-sections .sidebar h2 { display: none; }
   .sidebar-examples a { padding: 6px 12px; }
   .sidebar a[aria-current='location'] { background: var(--raised); box-shadow: inset 0 -2px 0 var(--tint); border-left: 0; padding-left: 12px; }
-  html:has(.page-examples) { scroll-padding-top: 130px; }
-  .page.page-examples { padding-top: 8px; }
+  html:has(.page-sections) { scroll-padding-top: 130px; }
+  .page.page-sections { padding-top: 8px; }
 }
 @media (max-width: 760px) {
   .page { padding: 36px 16px 0; }
@@ -408,7 +408,6 @@ h3 { font: 600 16px/1.3 var(--display); }
   .pg-stage { min-height: 380px; }
   .demo { padding: 32px 14px 24px; }
   .demo-ask, .ask-flow .demo-ask { height: 580px; }
-  .pager a { min-width: 0; flex: 1; }
 }
 @media (max-width: 480px) {
   .brand span { display: none; }
