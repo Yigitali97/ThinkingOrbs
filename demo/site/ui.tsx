@@ -73,6 +73,21 @@ export function CodeBlock({ code, title, copy = true }: { code: string; title?: 
   );
 }
 
+/** A folded panel, closed until its label is clicked. */
+export function Disclosure({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="disclosure">
+      <summary>
+        <svg className="disclosure-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {label}
+      </summary>
+      <div className="disclosure-body">{children}</div>
+    </details>
+  );
+}
+
 /** Radio-style segmented control. */
 export function Segmented<T extends string>({
   label,

@@ -1,4 +1,4 @@
-// Reference content for each component page: usage, props, states and notes.
+// Reference content for each component on the components page: usage, props, states and notes.
 // Kept in step with the README; `docs.test.ts` checks every component has an entry.
 
 export interface Prop {

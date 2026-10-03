@@ -133,12 +133,12 @@ test('switching orbs keeps each orb’s settings', async ({ page }) => {
   await expect(page).toHaveURL(/orb=status-orb&variant=waiting/);
 });
 
-test('the reference link opens the component page', async ({ page }) => {
+test('the reference link opens the component on the components page', async ({ page }) => {
   await page.goto('/playground?orb=tool-orb');
   await page.getByRole('link', { name: 'ToolOrb reference' }).click();
   await expect(page).toHaveURL(/\/components\/tool-orb$/);
-  await expect(page.locator('h1')).toHaveText('ToolOrb');
-  await page.getByRole('link', { name: 'Try every option in the playground' }).click();
+  await expect(page.locator('#tool-orb h2')).toBeInViewport();
+  await page.locator('#tool-orb').getByRole('link', { name: 'Try every option in the playground' }).click();
   await expect(page).toHaveURL(/\/playground\?orb=tool-orb$/);
   await expect(page.getByRole('tab', { name: 'ToolOrb' })).toHaveAttribute('aria-selected', 'true');
 });
