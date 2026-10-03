@@ -6,6 +6,11 @@ import {
   ASSISTANT_COLORS,
   AssistantOrb,
   AssistantState,
+  BOT_STATES,
+  botCaption,
+  BotOrb,
+  BotOrbRef,
+  BotState,
   captureFrames,
   GazeOrb,
   GazeOrbRef,
@@ -579,6 +584,33 @@ function MascotDemo() {
   );
 }
 
+// ------------------------------------------------------------------------- BotOrb
+
+function BotDemo() {
+  const ref = useRef<BotOrbRef>(null);
+  const [state, setState] = useState<BotState>('idle');
+  // listening and speaking follow a built-in voice pattern here; pass stream for real audio
+  const voiced = state === 'listening' || state === 'speaking';
+  return (
+    <div className="demo">
+      <Segmented label="Bot state" options={BOT_STATES} value={state} onChange={setState} render={cap} />
+      <BotOrb ref={ref} state={state} size={240} getLevel={voiced ? fakeVoice : undefined} />
+      {/* the bot announces its own state; this is the caption you see */}
+      <div className="state-caption" aria-hidden="true">
+        {botCaption(state)}
+      </div>
+      <div className="actions">
+        <button type="button" className="btn" onClick={() => ref.current?.blink()}>
+          Blink
+        </button>
+        <button type="button" className="btn" onClick={() => ref.current?.bounce()}>
+          Bounce
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------------ GazeOrb
 
 function GazeDemo() {
@@ -616,6 +648,7 @@ export const DEMOS: Record<string, () => ReactNode> = {
   'tool-orb': ToolDemo,
   'ask-orb': AskDemo,
   'mascot-orb': MascotDemo,
+  'bot-orb': BotDemo,
   'gaze-orb': GazeDemo,
   'search-orb': SearchDemo,
   'ingest-orb': IngestDemo,

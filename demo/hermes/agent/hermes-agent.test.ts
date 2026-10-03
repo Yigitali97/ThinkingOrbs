@@ -1,0 +1,639 @@
+// Tests for the Hermes agent: the brain runner, every question in spec §4.6 per role, and that restricted data never reaches the brain.
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { setDown } from '../../assistant/flaky';
+import type { AgentDefinition, Block, PageContext, ToolResult, User } from '../../assistant/protocol';
+import { runBrain, runBrief } from '../../assistant/testing';
+import { HERMES_SEED } from '../config';
+import { generateCompany } from '../data/generate';
+import type { Company } from '../data/types';
+import { createHermesPolicy } from '../policy';
+import { hermesAgent, hermesSuggestions } from './definition';
+import { HERMES_INTENTS, projectIn, unknownProjectName } from './intents';
+import { hermesTools } from './tools';
+
+const NOW = new Date('2026-10-07T15:00:00'); // Wednesday
+const MONDAY_EARLY = new Date('2026-10-05T00:30:00');
+const DEVELOPER_COPY = "Individual hours for other people are visible to managers. Here's your team's total instead.";
+const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
+
+const MAYA_BRIEF =
+  'This week Platform and Product logged 239 h, 98% of the 244.2 h capacity so far. 3 PRs merged since Monday. ' +
+  'Atlas is at risk: 3 blocked tickets; Comet is off track: projected to finish 2 weeks after the target date.';
+const DANIEL_BRIEF =
+  'This week the Platform team logged 123 h, 97% of the 126.5 h capacity so far. 2 PRs merged since Monday. ' +
+  'Atlas is at risk: 3 blocked tickets; Comet is off track: projected to finish 2 weeks after the target date.';
+const SARA_BRIEF =
+  'This week the Platform team logged 123 h, 97% of the 126.5 h capacity so far. 2 PRs merged since Monday. Atlas is at risk: 3 blocked tickets.';
+
+const c = generateCompany(HERMES_SEED, NOW);
+const defFor = (co: Company): AgentDefinition => ({ ...hermesAgent, tools: hermesTools(() => co), policy: createHermesPolicy(() => co) });
+const def = defFor(c);
+
+const asUser = (co: Company, id: string): User => {
+  const p = co.people.find((x) => x.id === id)!;
+  return { id: p.id, name: p.name, title: p.title, role: p.role, team: p.team };
+};
+const MAYA = asUser(c, 'p-maya');
+const DANIEL = asUser(c, 'p-daniel');
+const SARA = asUser(c, 'p-sara');
+
+const ask = (q: string, user: User, extra: { page?: PageContext; now?: Date; d?: AgentDefinition } = {}) =>
+  runBrain(extra.d ?? def, q, { now: extra.now ?? NOW, user, page: extra.page });
+
+const ofKind = <K extends Block['kind']>(blocks: Block[], kind: K) => blocks.filter((b) => b.kind === kind) as Extract<Block, { kind: K }>[];
+const table = (blocks: Block[]) => ofKind(blocks, 'table')[0];
+const isDeveloper = (p: Company['people'][number]) => p.role === 'developer' && p.title.includes('Developer');
+const ATLAS_PAGE: PageContext = { page: 'project', id: 'atlas', title: 'Atlas' };
+
+afterEach(() => {
+  setDown('Jira', false);
+  setDown('Clockify', false);
+});
+
+describe('project names', () => {
+  it('matches a project case-insensitively, ignoring a trailing possessive', () => {
+    expect(projectIn("What's blocking Atlas?", c.projects)?.id).toBe('atlas');
+    expect(projectIn("atlas's blockers?", c.projects)?.id).toBe('atlas');
+    expect(projectIn('how is DELTA doing', c.projects)?.id).toBe('delta');
+    expect(projectIn('how is the team doing', c.projects)).toBeNull();
+  });
+
+  it('picks out an unknown capitalized name after blocking, about or is', () => {
+    expect(unknownProjectName("What's blocking Zephyr?")).toBe('Zephyr');
+    expect(unknownProjectName('Tell me about Orion')).toBe('Orion');
+    expect(unknownProjectName('How is the team doing?')).toBeNull();
+  });
+
+  it('never reads a person or team name as an unknown project', () => {
+    for (const q of ['How is Sara doing?', 'How is Sara Lindqvist doing?', 'How is Platform doing?', "What's blocking Leo?", 'Tell me about Product']) {
+      expect(unknownProjectName(q), q).toBeNull();
+    }
+  });
+
+  it.each(['How is Sara doing?', 'How is Platform doing?'])('does not refuse "%s" as a missing project', async (q) => {
+    const r = await ask(q, MAYA);
+    expect(r.text).not.toContain("I can't find a project called");
+    expect(r.text).not.toContain("isn't one of the projects you can see");
+  });
+
+  it('lists the intents in the documented order', () => {
+    expect(HERMES_INTENTS.map((i) => i.id)).toEqual([
+      'open-dashboard', 'this-project', 'my-tickets', 'person-hours', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
+      'meeting-decisions', 'channel-summary', 'aws-costs', 'status-draft',
+    ]);
+  });
+});
+
+describe('developer hours', () => {
+  const Q = 'How many hours did developers work this week?';
+
+  it('shows Maya one row per developer that adds up to their Clockify entries, plus a chart', async () => {
+    const r = await ask(Q, MAYA);
+    const t = table(r.blocks);
+    const devs = c.people.filter(isDeveloper);
+    expect(t.rows).toHaveLength(devs.length);
+    expect(t.columns.map((col) => col.key)).toEqual(['person', 'hours', 'capacity']);
+    const monday = new Date(2026, 9, 5).getTime();
+    const ids = new Set(devs.map((p) => p.id));
+    const expected = c.time.filter((e) => ids.has(e.personId) && e.at >= monday && e.at <= NOW.getTime()).reduce((s, e) => s + e.hours, 0);
+    const sum = t.rows.reduce((s, row) => s + Number(row.hours), 0);
+    expect(sum).toBeCloseTo(expected, 0);
+    expect(ofKind(r.blocks, 'chart')).toHaveLength(1);
+    expect(ofKind(r.blocks, 'chart')[0].type).toBe('bar');
+    expect(r.text).toMatch(/Sources: .*Clockify/);
+  });
+
+  it('shows Sara the Developer copy, her own hours and her team total only', async () => {
+    const r = await ask(Q, SARA);
+    expect(r.text).toContain(DEVELOPER_COPY);
+    const t = table(r.blocks);
+    expect(t.columns.map((col) => col.key)).toEqual(['who', 'hours']);
+    expect(t.rows.map((row) => row.who)).toEqual(['You', 'Platform team total']);
+  });
+
+  it('has no NaN or Infinity early on a Monday, and every hours cell is 0', async () => {
+    const early = generateCompany(HERMES_SEED, MONDAY_EARLY);
+    const r = await ask(Q, asUser(early, 'p-maya'), { now: MONDAY_EARLY, d: defFor(early) });
+    const json = JSON.stringify(r);
+    expect(json).not.toContain('NaN');
+    expect(json).not.toContain('Infinity');
+    const t = table(r.blocks);
+    expect(t.rows.length).toBeGreaterThan(0);
+    for (const row of t.rows) expect(row.hours).toBe(0);
+    expect(ofKind(r.blocks, 'stat')[0].items[0].delta).toBe('No change data');
+  });
+});
+
+describe("Sara never receives what she can't see", () => {
+  const QUESTIONS: [string, PageContext?][] = [
+    ['How is the team doing?'],
+    ['How many hours did developers work this week?'],
+    ['How are the projects going?'],
+    ["What's blocking Atlas?"],
+    ["What's blocking Beacon?"],
+    ["What did we decide in yesterday's standup?"],
+    ['Summarize #backend this week'],
+    ['Why did AWS costs go up?'],
+    ['What are my open tickets?'],
+    ['How many hours did I work this week?'],
+    ['Write a status update for the team'],
+    ['How is this one doing?', ATLAS_PAGE],
+    ['How is this one doing?', { page: 'project', id: 'comet', title: 'Comet' }],
+    ['How many hours did Leo work this week?'],
+    ["Show me Leo's timesheet"],
+    ['How many hours did Amir Haddad work last week?'],
+    ['How is the Product team doing?'],
+    ['Write a status update for Beacon'],
+  ];
+
+  const noLeak = (r: { received: ToolResult[] }) => {
+    for (const res of r.received) {
+      if (!res.ok) continue;
+      const data = res.data as Record<string, unknown> | Record<string, unknown>[];
+      if (!Array.isArray(data) && Array.isArray(data.entries)) {
+        for (const e of data.entries as { personId: string }[]) expect(e.personId).toBe('p-sara');
+      }
+      const items = Array.isArray(data) ? data : Array.isArray(data.entries) ? (data.entries as Record<string, unknown>[]) : [];
+      for (const item of items) {
+        expect(item).not.toHaveProperty('budgetHours');
+        expect(['beacon', 'comet']).not.toContain(item.projectId);
+        expect(['beacon', 'comet']).not.toContain(item.id);
+      }
+    }
+    const json = JSON.stringify(r);
+    expect(json).not.toContain('NaN');
+    expect(json).not.toContain('Infinity');
+    expect(json).not.toMatch(/BCN-|CMT-/);
+  };
+
+  it.each(QUESTIONS)('%s', async (q, page) => noLeak(await ask(q, SARA, { page })));
+  it('the morning brief', async () => noLeak(await runBrief(def, { now: NOW, user: SARA })));
+  it.each([['Open Beacon'], ['Show me the team dashboard'], ['Open Comet']])('%s', async (q) => noLeak(await ask(q, SARA)));
+});
+
+describe("Daniel never receives a Product person's hours", () => {
+  const PRODUCT = new Set(c.people.filter((p) => p.team === 'Product').map((p) => p.id));
+  const QUESTIONS = [
+    'How is the team doing?',
+    'How is the Product team doing?',
+    'How many hours did developers work this week?',
+    'How many hours did developers work last month?',
+    'How many hours did I work this week?',
+    'How many hours did Leo work this week?',
+    'How many hours did Amir work this week?',
+    "Show me Chloe's timesheet",
+    'How many hours did Omar Reyes work last week?',
+    'Write a status update for the team',
+    'Write a status update for Beacon',
+  ];
+
+  const noProductHours = (q: string, r: { received: ToolResult[] }) => {
+    for (const res of r.received) {
+      if (!res.ok) continue;
+      const data = res.data as { entries?: { personId: string }[] };
+      if (Array.isArray(data) || !Array.isArray(data.entries)) continue;
+      for (const e of data.entries) expect(PRODUCT.has(e.personId), `${q}: ${e.personId}`).toBe(false);
+    }
+  };
+
+  it.each(QUESTIONS)('%s', async (q) => noProductHours(q, await ask(q, DANIEL)));
+  it('the morning brief', async () => noProductHours('brief', await runBrief(def, { now: NOW, user: DANIEL })));
+});
+
+describe("one person's hours", () => {
+  const monday = new Date(2026, 9, 5).getTime();
+  const thisWeek = (ids: Set<string>) => {
+    const entries = c.time.filter((e) => ids.has(e.personId) && e.at >= monday && e.at <= NOW.getTime());
+    return Math.round(entries.reduce((s, e) => s + e.hours, 0) * 10) / 10;
+  };
+  const hoursThisWeek = (id: string) => thisWeek(new Set([id]));
+  const platform = new Set(c.people.filter((p) => p.team === 'Platform').map((p) => p.id));
+  const platformTotal = () => `${thisWeek(platform).toLocaleString('en-US')} h`;
+
+  it.each(['How many hours did Leo work this week?', "Show me Leo's timesheet", 'How many hours did Leo Park log this week?'])(
+    'shows Maya Leo’s hours against capacity: %s',
+    async (q) => {
+      const r = await ask(q, MAYA);
+      expect(r.text).toContain(`Leo Park logged ${hoursThisWeek('p-leo').toLocaleString('en-US')} h this week`);
+      expect(r.text).toMatch(/against [\d.,]+ h of capacity so far/);
+      expect(r.text).not.toContain('You logged');
+      expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+      expect(r.text).toMatch(/Sources: .*Clockify/);
+    },
+  );
+
+  it('shows Daniel Leo, who is in his team, with no restriction note', async () => {
+    const r = await ask('How many hours did Leo work this week?', DANIEL);
+    expect(r.text).toContain(`Leo Park logged ${hoursThisWeek('p-leo').toLocaleString('en-US')} h this week`);
+    expect(r.text).not.toContain(MANAGER_COPY);
+  });
+
+  it('gives Daniel the Manager copy and the Product total for a Product person', async () => {
+    const r = await ask('How many hours did Amir work this week?', DANIEL);
+    expect(r.text.startsWith(MANAGER_COPY)).toBe(true);
+    expect(r.text).toMatch(/The Product team logged [\d.,]+ h this week in total\./);
+    expect(r.text).not.toContain('Amir Haddad logged');
+    expect(r.text).toMatch(/Sources: .*Clockify/);
+  });
+
+  it.each(['How many hours did Leo work this week?', "Show me Leo's timesheet", 'How many hours did Amir work this week?'])(
+    'gives Sara the Developer copy and her team total: %s',
+    async (q) => {
+      const r = await ask(q, SARA);
+      expect(r.text.startsWith(DEVELOPER_COPY)).toBe(true);
+      expect(r.text).toContain(`The Platform team logged ${platformTotal()} this week in total.`);
+      expect(r.text).not.toMatch(/Leo Park logged|Amir Haddad logged|You logged/);
+      expect(r.tools).toContain('clockify.timeEntries');
+    },
+  );
+
+  it('answers as my-hours when Sara names herself', async () => {
+    const r = await ask('How many hours did Sara work this week?', SARA);
+    expect(r.text).toContain('You logged 11 h this week');
+    expect(r.text).not.toContain(DEVELOPER_COPY);
+  });
+});
+
+describe('teams and projects outside what you can see', () => {
+  it('tells Sara the Product team is outside what she can see and offers Platform', async () => {
+    const r = await ask('How is the Product team doing?', SARA);
+    expect(r.text).toContain("The Product team isn't one of the teams you can see.");
+    expect(r.text).toContain('Platform');
+    expect(r.blocks).toHaveLength(0);
+    expect(r.tools).not.toContain('clockify.timeEntries');
+    expect(r.tools).not.toContain('jira.issues');
+  });
+
+  it('answers Maya about the Product team only', async () => {
+    const r = await ask('How is the Product team doing?', MAYA);
+    expect(r.text).toContain('The Product team logged');
+    expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+  });
+
+  it('tells Sara Beacon is not one of her projects instead of drafting for Platform', async () => {
+    const r = await ask('Write a status update for Beacon', SARA);
+    expect(r.text).toContain("Beacon isn't one of the projects you can see. Your projects: Atlas, Delta.");
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(0);
+    expect(r.tools).toEqual(['directory.projects']);
+  });
+
+  it('tells Sara she cannot draft for the Product team', async () => {
+    const r = await ask('Write a status update for the Product team', SARA);
+    expect(r.text).toContain("The Product team isn't one of the teams you can see.");
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(0);
+  });
+
+  it('drafts a Product update for Maya when she names Beacon', async () => {
+    const r = await ask('Write a status update for Beacon', MAYA);
+    const draft = ofKind(r.blocks, 'draft')[0];
+    expect(draft.to).toBe('#product');
+    expect(draft.subject).toBe('Product team status update');
+  });
+});
+
+describe('project status', () => {
+  const Q = 'How are the projects going?';
+
+  it('gives Maya one status block per project', async () => {
+    const r = await ask(Q, MAYA);
+    const s = ofKind(r.blocks, 'status');
+    expect(s).toHaveLength(4);
+    const byTitle = Object.fromEntries(s.map((b) => [b.title, b.status]));
+    expect(byTitle).toEqual({ Atlas: 'at-risk', Comet: 'off-track', Beacon: 'on-track', Delta: 'on-track' });
+    expect(s.find((b) => b.title === 'Atlas')?.href).toBe('/hermes/projects/atlas');
+    expect(s.find((b) => b.title === 'Delta')?.reasons).toEqual(['On pace to finish by the target date']);
+  });
+
+  it('gives Sara only her team projects', async () => {
+    const r = await ask(Q, SARA);
+    expect(ofKind(r.blocks, 'status').map((b) => b.title).sort()).toEqual(['Atlas', 'Delta']);
+  });
+
+  it('answers "How is this one doing?" on a project page from the page context', async () => {
+    const r = await ask('How is this one doing?', MAYA, { page: ATLAS_PAGE });
+    expect(r.text).toContain('Atlas');
+    expect(ofKind(r.blocks, 'status')).toHaveLength(1);
+  });
+
+  it('does not let "this week" on a project page hijack an hours question', async () => {
+    const r = await ask('How many hours did developers work this week?', MAYA, { page: ATLAS_PAGE });
+    expect(ofKind(r.blocks, 'status')).toHaveLength(0);
+    expect(ofKind(r.blocks, 'chart')).toHaveLength(1);
+  });
+});
+
+describe('project blockers', () => {
+  it.each(["What's blocking Atlas?", "what's blocking atlas", "Atlas's blockers?"])('%s', async (q) => {
+    const r = await ask(q, MAYA);
+    expect(table(r.blocks).rows).toHaveLength(3);
+    expect(r.text).toContain('Retry failed payment webhooks with backoff');
+    expect(r.text).toMatch(/Sources: .*Jira.*GitHub/);
+  });
+
+  it("says it can't find an unknown project and shows nothing", async () => {
+    const r = await ask("What's blocking Zephyr?", MAYA);
+    expect(r.text).toContain("I can't find a project called Zephyr.");
+    expect(r.blocks).toHaveLength(0);
+  });
+
+  it('refuses a project outside Sara’s team without asking Jira about it', async () => {
+    const r = await ask("What's blocking Beacon?", SARA);
+    expect(r.text).toContain("Beacon isn't one of the projects you can see. Your projects: Atlas, Delta.");
+    expect(r.tools).not.toContain('jira.issues');
+    expect(r.blocks).toHaveLength(0);
+  });
+});
+
+describe('AWS costs', () => {
+  const Q = 'Why did AWS costs go up?';
+
+  it('shows Maya a line chart and the cause', async () => {
+    const r = await ask(Q, MAYA);
+    const chart = ofKind(r.blocks, 'chart')[0];
+    expect(chart.type).toBe('line');
+    expect(chart.x).toHaveLength(6);
+    expect(chart.series.map((s) => s.name)).toContain('EC2');
+    expect(r.text).toContain('12 extra instances');
+    expect(r.text).toContain('EC2');
+  });
+
+  it('tells Daniel costs are for leadership and shows health instead', async () => {
+    const r = await ask(Q, DANIEL);
+    expect(r.text).toContain('AWS costs are visible to leadership.');
+    expect(r.text).toContain('I can show AWS service health instead.');
+    expect(table(r.blocks).rows).toHaveLength(5);
+    expect(ofKind(r.blocks, 'chart')).toHaveLength(0);
+  });
+});
+
+describe('meetings, channels, tickets and hours', () => {
+  it("lists yesterday's standup decisions and owners for Daniel", async () => {
+    const r = await ask("What did we decide in yesterday's standup?", DANIEL);
+    for (const d of [
+      'Freeze the Atlas API contract until the blocked tickets are cleared',
+      'Ship the Delta migration behind a feature flag',
+      'Hand the Atlas webhook retries from Leo to Sara',
+    ]) {
+      expect(r.text).toContain(d);
+    }
+    expect(r.text).toContain('Daniel Okafor: Chase the vendor for sandbox credentials');
+    expect(r.text).toMatch(/Sources: .*Teams/);
+  });
+
+  it('summarizes #backend this week with up to three key messages', async () => {
+    const r = await ask('Summarize #backend this week', DANIEL);
+    expect(r.text).toMatch(/#backend had \d+ messages this week/);
+    const quoted = r.text.split('\n').filter((l) => l.startsWith('- '));
+    expect(quoted.length).toBeGreaterThan(0);
+    expect(quoted.length).toBeLessThanOrEqual(3);
+  });
+
+  it("lists Sara's open tickets", async () => {
+    const r = await ask('What are my open tickets?', SARA);
+    const mine = c.issues.filter((i) => i.assigneeId === 'p-sara' && i.status !== 'done');
+    expect(table(r.blocks).rows).toHaveLength(mine.length);
+    expect(r.text).toMatch(/Sources: Jira/);
+  });
+
+  it("gives Sara her own hours this week, with no restriction note", async () => {
+    const r = await ask('How many hours did I work this week?', SARA);
+    expect(r.text).toContain('You logged 11 h this week');
+    expect(r.text).not.toContain(DEVELOPER_COPY);
+    expect(r.text.startsWith('You logged')).toBe(true);
+  });
+});
+
+describe('team health and the status draft', () => {
+  it('drafts a Teams update with the PRs-merged number from team health', async () => {
+    const health = await ask('How is the team doing?', DANIEL);
+    const merged = ofKind(health.blocks, 'stat')[0].items.find((i) => i.label === 'PRs merged')!.value;
+    const r = await ask('Write a status update for the team', DANIEL);
+    const draft = ofKind(r.blocks, 'draft')[0];
+    expect(draft.channel).toBe('teams');
+    expect(draft.body).toContain(`PRs merged: ${merged}`);
+    expect(Number(merged)).toBeGreaterThan(0);
+  });
+
+  it('drafts a status update when a project is named, instead of answering with its status', async () => {
+    const r = await ask('Write a status update for Atlas', DANIEL);
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(1);
+    expect(ofKind(r.blocks, 'status')).toHaveLength(0);
+  });
+
+  it('shows team health stats and who is over or under capacity', async () => {
+    const r = await ask('How is the team doing?', DANIEL);
+    expect(ofKind(r.blocks, 'stat')[0].items.map((i) => i.label)).toEqual(['Hours vs capacity', 'PRs merged', 'Tickets closed']);
+    const names = table(r.blocks).rows.map((row) => row.person);
+    expect(names).toContain('Sara Lindqvist');
+    expect(names).toContain('Leo Park');
+    expect(r.text).toMatch(/Sources: .*Clockify.*Jira.*GitHub/);
+  });
+
+  it('only shows Sara herself in the over/under table', async () => {
+    const r = await ask('How is the team doing?', SARA);
+    for (const row of table(r.blocks)?.rows ?? []) expect(row.person).toBe('Sara Lindqvist');
+  });
+
+  it('says when Jira did not respond', async () => {
+    setDown('Jira', true);
+    const r = await ask('How is the team doing?', MAYA);
+    expect(r.text).toContain("Jira didn't respond, so closed tickets and blockers aren't included.");
+    expect(r.text).not.toMatch(/Sources: .*Jira/);
+  });
+
+  it('words every missing-data line with a verb that agrees', async () => {
+    setDown('Jira', true);
+    const tickets = await ask('What are my open tickets?', SARA);
+    expect(tickets.text).toContain("Jira didn't respond, so your tickets aren't included.");
+    const status = await ask('How are the projects going?', MAYA);
+    expect(status.text).toContain("Jira didn't respond, so tickets and sprints aren't included.");
+    setDown('Jira', false);
+    setDown('GitHub', true);
+    try {
+      const health = await ask('How is the team doing?', MAYA);
+      expect(health.text).toContain("GitHub didn't respond, so pull requests aren't included.");
+      expect(health.text).not.toMatch(/\b(requests|tickets|blockers|notes|names|hours) isn't included/);
+    } finally {
+      setDown('GitHub', false);
+    }
+  });
+});
+
+describe('opening a dashboard', () => {
+  it.each([
+    ['Show me the team dashboard', "Here's the Team dashboard.", '/hermes/team'],
+    ['Open the team', "Here's the Team dashboard.", '/hermes/team'],
+    ['Take me to the projects', "Here's the Projects dashboard.", '/hermes/projects'],
+    ['Go to connections', "Here's the Connections page.", '/hermes/connections'],
+    ['Open the integrations page', "Here's the Connections page.", '/hermes/connections'],
+    ['Open Atlas', "Here's the Atlas project.", '/hermes/projects/atlas'],
+    ['show me the Delta project', "Here's the Delta project.", '/hermes/projects/delta'],
+  ])('%s', async (q, text, href) => {
+    const r = await ask(q, MAYA);
+    expect(r.text).toBe(text);
+    expect(r.opens).toEqual([href]);
+    expect(r.blocks).toEqual([]);
+  });
+
+  it('refuses a project the user cannot see, and opens nothing', async () => {
+    const r = await ask('Open Beacon', SARA);
+    expect(r.text).toContain("Beacon isn't one of the projects you can see. Your projects: Atlas, Delta.");
+    expect(r.opens).toEqual([]);
+  });
+
+  it('opens nothing when the directory is down', async () => {
+    setDown('Directory', true);
+    try {
+      const r = await ask('Open Atlas', MAYA);
+      expect(r.opens).toEqual([]);
+    } finally {
+      setDown('Directory', false);
+    }
+  });
+
+  it.each([
+    ['How is the team doing?', 'stat'],
+    ['How are the projects going?', 'status'],
+    ['Write a status update for Atlas', 'draft'],
+    ["What's blocking Atlas?", 'table'],
+    ['Show me the team hours this week', 'stat'],
+    ["Show me Leo's timesheet", 'stat'],
+  ] as const)('leaves "%s" to its own intent', async (q, kind) => {
+    const r = await ask(q, MAYA);
+    expect(r.opens).toEqual([]);
+    expect(ofKind(r.blocks, kind).length, q).toBeGreaterThan(0);
+  });
+});
+
+describe('the morning brief', () => {
+  it('tells Maya the hours, the merged PRs and the projects at risk', async () => {
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).toBe(MAYA_BRIEF);
+    expect(r.text).toContain('PRs merged');
+    expect(r.text).toContain('Atlas');
+    expect(r.blocks).toEqual([]);
+    expect(r.text).not.toContain('Sources');
+  });
+
+  it('gives Daniel his own team and Sara hers, as totals only', async () => {
+    expect((await runBrief(def, { now: NOW, user: DANIEL })).text).toBe(DANIEL_BRIEF);
+    const sara = await runBrief(def, { now: NOW, user: SARA });
+    expect(sara.text).toBe(SARA_BRIEF);
+    expect(sara.text).toContain('Platform');
+    for (const p of c.people) if (p.id !== 'p-sara') expect(sara.text).not.toContain(p.name);
+  });
+
+  it('is not a number soup at Monday 00:30', async () => {
+    const r = await runBrief(def, { now: MONDAY_EARLY, user: MAYA });
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(r.text).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('skips the projects sentence when Jira is down', async () => {
+    setDown('Jira', true);
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).toContain('PRs merged');
+    expect(r.text).not.toMatch(/Atlas|on track|at risk|off track/);
+  });
+
+  it('skips the hours sentence when Clockify is down', async () => {
+    setDown('Clockify', true);
+    const r = await runBrief(def, { now: NOW, user: MAYA });
+    expect(r.text).not.toContain('logged');
+    expect(r.text).toContain('PRs merged');
+  });
+
+  it('is empty-handed without a signed-in user', async () => {
+    const r = await runBrief(def, { now: NOW });
+    expect(r.text).toBe('');
+  });
+
+  it('is exposed as the agent brief', () => {
+    expect(hermesAgent.brief).toBeTypeOf('function');
+  });
+});
+
+describe('the brain runner', () => {
+  it('says it is not sure and calls no tools', async () => {
+    const r = await ask('Tell me a joke', MAYA);
+    expect(r.text.startsWith("I'm not sure what you're asking.")).toBe(true);
+    for (const s of hermesAgent.suggestions({ page: 'home', title: 'Home' }, MAYA)) expect(r.text).toContain(s);
+    expect(r.tools).toEqual([]);
+  });
+
+  it('reads an attachment first and asks what to do with it', async () => {
+    const r = await runBrain(def, '', { now: NOW, user: MAYA, attachments: [{ id: 'a', name: 'notes.txt', type: 'text/plain', size: 2048 }] });
+    expect(r.activities.some((a) => a.kind === 'file')).toBe(true);
+    expect(r.text).toContain("I've read notes.txt (2.0 KB).");
+    expect(r.text).toContain('What would you like to know about it?');
+    expect(r.tools).toEqual([]);
+  });
+
+  it('looks at an image and then answers the question', async () => {
+    const r = await runBrain(def, 'How is the team doing?', {
+      now: NOW,
+      user: MAYA,
+      attachments: [{ id: 'i', name: 'board.png', type: 'image/png', size: 4096, url: 'data:image/png;base64,AAAA' }],
+    });
+    expect(r.activities.some((a) => a.kind === 'image')).toBe(true);
+    expect(r.text).toContain("I've read board.png (4.0 KB).");
+    expect(ofKind(r.blocks, 'stat')).toHaveLength(1);
+  });
+});
+
+describe('suggestions', () => {
+  const KINDS: PageContext[] = [
+    { page: 'home', title: 'Home' },
+    { page: 'team', title: 'Team' },
+    { page: 'projects', title: 'Projects' },
+    ATLAS_PAGE,
+    { page: 'connections', title: 'Connections' },
+  ];
+
+  it('returns exactly three for every page kind and role', () => {
+    for (const page of KINDS) for (const user of [MAYA, DANIEL, SARA]) expect(hermesSuggestions(page, user), `${user.id} ${page.page}`).toHaveLength(3);
+  });
+
+  it.each([[MAYA], [DANIEL], [SARA]])('offers the team dashboard on Home to %#', (user) => {
+    expect(hermesSuggestions(KINDS[0], user)).toContain('Show me the team dashboard');
+  });
+
+  it('offers the AWS question on Home to Leadership only', () => {
+    expect(hermesSuggestions(KINDS[0], MAYA)).toContain('Why did AWS costs go up?');
+    for (const u of [DANIEL, SARA]) expect(hermesSuggestions(KINDS[0], u)).not.toContain('Why did AWS costs go up?');
+  });
+
+  it('asks about "this one" on a project page', () => {
+    for (const u of [MAYA, DANIEL, SARA]) expect(hermesSuggestions(ATLAS_PAGE, u)).toContain('How is this one doing?');
+  });
+});
+
+describe('definition', () => {
+  it('greets by first name', () => {
+    expect(hermesAgent.greeting(MAYA)).toBe('Hi Maya. Ask me about the team, hours, projects, code, Teams or AWS.');
+  });
+
+  it('offers three page-aware suggestions, each of which Hermes understands', async () => {
+    const pages: PageContext[] = [
+      { page: 'home', title: 'Home' },
+      { page: 'team', title: 'Team' },
+      { page: 'projects', title: 'Projects' },
+      ATLAS_PAGE,
+      { page: 'connections', title: 'Connections' },
+      { page: 'unknown', title: 'Hermes' },
+    ];
+    expect(hermesAgent.suggestions(pages[0], MAYA)).toContain('Why did AWS costs go up?');
+    expect(hermesAgent.suggestions(ATLAS_PAGE, SARA)).toContain('How is this one doing?');
+    for (const page of pages) {
+      for (const user of [MAYA, DANIEL, SARA]) {
+        const list = hermesAgent.suggestions(page, user);
+        expect(list).toHaveLength(3);
+        for (const s of list) {
+          const r = await ask(s, user, { page });
+          expect(r.text, `${user.id} on ${page.page}: ${s}`).not.toContain("I'm not sure what you're asking.");
+        }
+      }
+    }
+  });
+});

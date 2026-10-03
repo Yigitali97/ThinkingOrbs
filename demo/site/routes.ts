@@ -3,7 +3,7 @@
 
 export const SITE_NAME = 'ThinkingOrbs';
 export const SITE_DESCRIPTION =
-  'Animated orb components for AI interfaces: thirteen React components that show what an assistant is doing, driven by real audio, tokens, tool calls, sources and progress.';
+  'Animated orb components for AI interfaces: fourteen React components that show what an assistant is doing, driven by real audio, tokens, tool calls, sources and progress.';
 
 export type Group = 'Voice' | 'Chat' | 'Search' | 'Files & reasoning';
 export const GROUPS: Group[] = ['Voice', 'Chat', 'Search', 'Files & reasoning'];
@@ -26,6 +26,7 @@ export const COMPONENTS: ComponentMeta[] = [
   { slug: 'tool-orb', name: 'ToolOrb', group: 'Chat', tint: '#38bdf8', summary: 'One satellite per tool call: running tools orbit, finished ones dock, failed ones fall away.' },
   { slug: 'ask-orb', name: 'AskOrb', group: 'Chat', tint: '#c4b5fd', summary: 'The whole flow in one component: prompt bar, thinking orb with live stages, answer card.' },
   { slug: 'mascot-orb', name: 'MascotOrb', group: 'Chat', tint: '#5f9ae6', summary: 'A glossy bubble character that blinks, glances at the pointer and bounces when pressed.' },
+  { slug: 'bot-orb', name: 'BotOrb', group: 'Chat', tint: '#8b7cff', summary: 'A friendly robot that floats on a glowing pedestal and shows what the assistant is doing: listening, thinking, speaking.' },
   { slug: 'gaze-orb', name: 'GazeOrb', group: 'Chat', tint: '#f2f2f2', summary: 'A ball whose eyes turn toward the pointer in 3D, with occasional blinks.' },
   { slug: 'search-orb', name: 'SearchOrb', group: 'Search', tint: '#a78bfa', summary: 'Sources fly into orbit as they are found, get ranked, then merge into the answer.' },
   { slug: 'ingest-orb', name: 'IngestOrb', group: 'Files & reasoning', tint: '#2dd4bf', summary: 'A file card that breaks into dots and flows into the sphere as the upload progresses.' },
@@ -71,6 +72,16 @@ export const EXAMPLES: ExampleMeta[] = [
     summary: 'AskOrb wired to an agent that reports its stages, with a switch to see how a failure looks.',
     uses: ['AskOrb'],
     tint: '#c4b5fd',
+  },
+];
+
+/** Whole sites built on the orbs. They are separate apps, so they are linked, not routed to. */
+export const SITE_LINKS: { name: string; summary: string; href: '/hermes/'; tint: string }[] = [
+  {
+    name: 'Hermes',
+    summary: 'An internal company portal whose AI assistant is on every page, answers with tables, charts and drafts, and shows each person only what their role allows.',
+    href: '/hermes/',
+    tint: '#7c9cff',
   },
 ];
 

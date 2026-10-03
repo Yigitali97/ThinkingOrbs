@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 // End-to-end tests run against the production build, served by `vite preview`.
 // Software WebGL keeps VoiceOrb rendering the same on machines without a GPU.
-const PORT = 5319;
+// PW_PORT picks another port, so a checkout can test its own build while another checkout's preview runs on the default.
+const PORT = Number(process.env.PW_PORT) || 5319;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -23,7 +24,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
-    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(smoke|navigation)\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(smoke|navigation|assistant|hermes)\.spec\.ts/ },
   ],
   webServer: {
     command: `npx vite build && npx vite preview --port ${PORT} --strictPort`,

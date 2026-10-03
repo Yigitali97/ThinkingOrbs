@@ -19,6 +19,8 @@ test('every component page shows its demo, props and code', async ({ page }) => 
     await expect(page.locator('.sidebar a[aria-current="page"]')).toHaveText(c.name);
     // AskOrb draws its orb only once a question is asked
     if (c.slug === 'ask-orb') await expect(demo(page).getByRole('textbox')).toBeVisible();
+    // BotOrb is SVG, not a canvas
+    else if (c.slug === 'bot-orb') await expect(demo(page).locator('[data-bot]')).toBeVisible();
     else await expect(demo(page).locator('canvas').first()).toBeVisible();
   }
 });
@@ -276,6 +278,20 @@ test('MascotOrb bounces when pressed and on request, and blinks', async ({ page 
   await orb.click();
   await page.waitForTimeout(120);
   expect(frameDiff(still, await pixels(orb)), 'pressing bounces too').toBeGreaterThan(0.3);
+  await demo(page).getByRole('button', { name: 'Blink' }).click();
+});
+
+test('BotOrb switches through every state from the picker, and announces it', async ({ page }) => {
+  await page.goto('/components/bot-orb');
+  const bot = demo(page).locator('[data-bot]');
+  await expect(bot).toHaveAttribute('data-state', 'idle');
+  const captions = { listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking', happy: 'Done', error: 'Something went wrong', idle: 'Ready' };
+  for (const [state, caption] of Object.entries(captions)) {
+    await demo(page).getByRole('radio', { name: new RegExp(`^${state}$`, 'i') }).click();
+    await expect(bot).toHaveAttribute('data-state', state);
+    await expect(demo(page).locator('.state-caption')).toHaveText(caption);
+  }
+  await demo(page).getByRole('button', { name: 'Bounce' }).click();
   await demo(page).getByRole('button', { name: 'Blink' }).click();
 });
 

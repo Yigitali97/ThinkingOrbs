@@ -1,8 +1,8 @@
 # ThinkingOrbs
 
-Animated orb components for AI interfaces — thirteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
+Animated orb components for AI interfaces — fourteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
 
-Every orb is drawn on a `<canvas>` and is driven by **real data** where it can be — audio level, streamed tokens, tool calls, sources, upload progress, reasoning steps, image pixels, video frames — instead of a canned loop.
+Every orb but one is drawn on a `<canvas>` (BotOrb is SVG and CSS), and each is driven by **real data** where it can be — audio level, streamed tokens, tool calls, sources, upload progress, reasoning steps, image pixels, video frames — instead of a canned loop.
 
 - **React 17+**, TypeScript, no dependencies beyond React
 - Works with Vite, Create React App and Next.js (components are marked `'use client'`)
@@ -23,13 +23,14 @@ const mic = useMicrophone();
 - [Getting started](#getting-started)
 - Components
   - Voice: [AssistantOrb](#assistantorb) · [VoiceOrb](#voiceorb)
-  - Chat: [StatusOrb](#statusorb) · [TokenOrb](#tokenorb) · [ToolOrb](#toolorb) · [AskOrb](#askorb) · [MascotOrb](#mascotorb) · [GazeOrb](#gazeorb)
+  - Chat: [StatusOrb](#statusorb) · [TokenOrb](#tokenorb) · [ToolOrb](#toolorb) · [AskOrb](#askorb) · [MascotOrb](#mascotorb) · [BotOrb](#botorb) · [GazeOrb](#gazeorb)
   - Search: [SearchOrb](#searchorb)
   - Files & reasoning: [IngestOrb](#ingestorb) · [ReasoningOrb](#reasoningorb) · [VisionOrb](#visionorb) · [ReelOrb](#reelorb)
 - [Helpers](#helpers)
 - [Shared conventions](#shared-conventions)
 - [Using an orb without React](#using-an-orb-without-react)
 - [Demo & development](#demo--development)
+- [AI-native sites](#ai-native-sites)
 - [Project structure](#project-structure)
 
 ---
@@ -45,6 +46,7 @@ const mic = useMicrophone();
 | Agent calling tools | **ToolOrb** | list of tool calls |
 | Full ask → answer flow | **AskOrb** | your agent's stages |
 | Assistant persona / mascot | **MascotOrb**, **GazeOrb** | pointer + clicks |
+| Assistant character | **BotOrb** | `state` + audio |
 | AI search | **SearchOrb** | `phase` + found sources |
 | File upload / ingestion | **IngestOrb** | upload `progress` |
 | Deep reasoning | **ReasoningOrb** | reasoning steps + budget |
@@ -242,6 +244,38 @@ mascot.current?.bounce(); // e.g. when a reply arrives
 | `label` | `string \| null` | `'Orb mascot'` | |
 
 Ref: `blink()`, `bounce(strength?: number)`.
+
+#### BotOrb
+
+A friendly robot that floats on a glowing pedestal and shows what the assistant is doing. Its dark visor carries the face: eyes that blink and glance toward the pointer while idle, pulsing ear lights and sound rings while listening, a spinning arc with sparks circling the head while thinking, a waveform while speaking, smiling eyes and a hop when an answer lands, and amber alert eyes with a short shake on error. It is SVG and CSS rather than a canvas, so it stays sharp at any size, down to a 56px face docked beside a message box.
+
+```tsx
+const bot = useRef<BotOrbRef>(null);
+<BotOrb ref={bot} state="thinking" size={220} />
+<BotOrb state="speaking" stream={ttsStream} /> // listening and speaking follow real audio
+bot.current?.bounce(); // e.g. when a reply lands
+```
+
+| State | Face | Motion |
+|---|---|---|
+| `idle` | eyes | gentle float, blinks, glances toward the pointer |
+| `listening` | eyes | ear lights pulse with the audio, sound rings ripple out |
+| `thinking` | spinning arc | sparks circle the head |
+| `speaking` | waveform | bars follow the audio (or a built-in pattern) |
+| `happy` | smiling eyes | one hop |
+| `error` | amber alert eyes | a short shake |
+
+| Prop | Type | Default | |
+|---|---|---|---|
+| `state` | `BotState` | `'idle'` | one of the states above (`BOT_STATES` lists them) |
+| `size` | `number` | `160` | below 72 the pedestal hides and the face fills the frame |
+| `pedestal` | `boolean` | `true` | the glowing ring pedestal under the bot |
+| `stream` | `MediaStream \| null` | `null` | audio to react to while listening or speaking |
+| `getLevel` | `() => number` | — | alternative to `stream`: polled every frame, return 0–1 |
+| `level` | `number` | — | loudness 0–1 from your own meter; `stream` and `getLevel` win |
+| `label` | `string \| null` | `'Hermes'` | `null` hides it from assistive tech |
+
+Ref: `bounce()`, `blink()`. The wrapper carries `data-bot` and `data-state`; a polite caption (`botCaption(state)`: Ready, Listening, Thinking…) announces each state. With `prefers-reduced-motion` the bot stops floating, pulsing and orbiting, and states change with a fade.
 
 #### GazeOrb
 
@@ -536,11 +570,62 @@ The demo's sample images and video frames are drawn in code (`demo/samples.ts`),
 
 ### Deploying the site
 
-`npm run build` writes a static site to `dist/`, with one HTML file per page (each with its own title and description) and a `404.html`, so every URL works on any static host without rewrite rules. To serve it from a sub-path, such as GitHub Pages at `/ThinkingOrbs/`, set the base path when building:
+`npm run build` writes a static site to `dist/`, with one HTML file per page (each with its own title and description) and a `404.html` that starts the right site for the address (Hermes under `/hermes/`, the docs anywhere else), so every URL works on any static host without rewrite rules. To serve it from a sub-path, such as GitHub Pages at `/ThinkingOrbs/`, set the base path when building:
 
 ```bash
 BASE_PATH=/ThinkingOrbs/ npm run build
 ```
+
+## AI-native sites
+
+**Hermes** (`demo/hermes/`) is a demo of a site that is an assistant first and pages second. It is the internal portal of a made-up company, Brightline Labs, whose AI assistant, Hermes, is connected to the company's systems: Directory, Clockify, Jira, GitHub, Teams and AWS. You talk to it, and it answers in the form that fits the question: text, a table, a chart, a status card, or a drafted Teams message or email. Typing, dictation and a hands-free voice mode are all supported.
+
+The workspace has three parts, on a dark-only theme of deep navy, glass panels and violet and cyan light:
+
+- **The rail** on the left: New conversation, this session's conversations, the dashboards (Team, Projects, Connections) and your account. It collapses to icons, and below 1024px it is a drawer behind a Menu button.
+- **The conversation** in the middle, always there while you are signed in. The first screen is the bot on its pedestal among the six systems it reads, a greeting, and a **morning brief** it writes for you as it reads them (each system lights up and beams to the bot while it is read). Once you ask something, the thread fills the column, answers are set in a serif with glass blocks, and the composer pins to the bottom.
+- **The canvas** on the right, where dashboards open beside the conversation (about 45% of the width). Ask "Show me the team dashboard" and Hermes opens it there without taking your focus; the address changes too, so every dashboard has its own URL. Below 1024px the canvas is a full-screen sheet, and Hermes offers an "Open Team" link in the answer rather than covering what you are reading.
+
+**The bot is always on screen** ([BotOrb](#botorb)): the hero on the first screen, then docked beside the message box with a short line saying what it is reading ("Reading Jira, GitHub…"), and riding above the sheet or drawer on a phone. It listens, thinks, speaks and hops when an answer lands. Click the docked bot to start typing.
+
+| First screen | Conversation with a dashboard | On a phone |
+|---|---|---|
+| ![The Hermes first screen: the bot on its pedestal among six systems, the greeting and the morning brief](docs/superpowers/screens/hermes-first-1280.png) | ![A conversation with stat cards and a table, and the Team dashboard open in the canvas](docs/superpowers/screens/hermes-canvas-1280.png) | ![The conversation on a phone, with the bot docked beside the message box](docs/superpowers/screens/hermes-conversation-375.png) |
+
+```bash
+npm run dev
+```
+
+Then open http://localhost:5318/hermes/. You are asked to sign in as one of three demo users, and the role decides what Hermes will show:
+
+| User | Role | Sees |
+|---|---|---|
+| Maya Chen, CTO | Leadership | everything: all projects, every person's hours, AWS costs |
+| Daniel Okafor, Engineering Manager | Manager | all projects, individual hours for his own team (Platform) and team totals for the others; no AWS costs |
+| Sara Lindqvist, Developer | Developer | her team's projects, her own hours and her team's total; no one else's hours, no AWS costs |
+
+When a question reaches something a role may not see, Hermes says what is held back and offers what it can show instead. Try "How many hours did developers work this week?" or "How many hours did Leo work this week?" as each user.
+
+The site is built in three layers, each knowing nothing about the one above it:
+
+| Layer | Folder | Holds |
+|---|---|---|
+| Site and agent | `demo/hermes/` | the pages, the generated company data, the tools, the role policy and the brain |
+| Shared assistant shell | `demo/assistant/` | dock, panel, thread, composer, voice mode, answer blocks, conversation state, tool runner and the event protocol (with `open` events and the brief); no data and no domain knowledge |
+| ThinkingOrbs | `src/orbs/` | the orbs |
+
+The shell never imports from `demo/hermes/`, so it is site-agnostic: a second agent with its own tools and scope, such as a fleet-management assistant, can reuse it by supplying another `AgentDefinition`.
+
+**Plugging in real systems.** The brain, tools and policy sit behind interfaces in `demo/assistant/protocol.ts`, and sign-in behind `demo/hermes/auth.ts`, so replacing them does not change the UI:
+
+- **Model.** Replace the `brain` (the `Brain` type) with one that calls your server, which calls a real model with the agent's tools as tool definitions and streams `AssistantEvent`s back.
+- **Connectors.** Implement `Tool.run` on a server for AWS, Jira, Microsoft Graph (Teams), Clockify and GitHub, keeping the same tool ids and output shapes.
+- **Policy.** Enforce the role rules (`Policy.before` and `Policy.after`) on the server, on the same tool calls. The list of tools given to an agent is its permission boundary. `Policy` is synchronous because the demo's tools run in the browser, so a server-side policy needs an adapter: apply it where the tools run, and have the browser's tool calls return what the server already narrowed.
+- **Identity.** Put a real identity provider behind `demo/hermes/auth.ts`, and take each user's role from your directory.
+
+The design is in `docs/superpowers/specs/2026-10-03-ai-native-sites-design.md` (section 9 covers this; section 10 covers the AI-first workspace).
+
+**What this demo is not.** Every number, person, ticket and message is generated in the browser from a fixed seed, so nothing leaves it and it works offline with no API key. The brain matches questions to a fixed set of intents rather than calling a model. Hermes is read-only: it never writes to any system, and its drafts are labelled "Demo — not sent". Sign-in is a picker for the three demo users, not real authentication. The role policy runs in the browser over data that is already there, and a team total over a narrow window can come close to one person's hours; both are closed by running the policy on the server, as above.
 
 ---
 
@@ -553,6 +638,7 @@ src/orbs/
   status/           StatusOrb
   gaze/             GazeOrb
   mascot/           MascotOrb
+  bot/              BotOrb (SVG and CSS)
   voice/            VoiceOrb, useMicrophone
   assistant/        AssistantOrb
   token/            TokenOrb
@@ -569,7 +655,9 @@ demo/               the demo site (main.tsx, samples.ts)
   examples/         the agent run and ask-and-answer examples
   voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
   chat-app/         the chat app sample (agent protocol + demo agent, UI)
+  assistant/        the shared assistant shell (dock, panel, thread, composer, voice mode, blocks)
+  hermes/           the Hermes site (workspace, agent, data, views)
 e2e/                browser tests (Playwright)
 ```
 
-Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
+Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`; `bot/` has its SVG component and a stylesheet instead of an engine.

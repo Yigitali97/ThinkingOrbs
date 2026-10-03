@@ -71,7 +71,7 @@ function Footer() {
   return (
     <footer className="footer">
       <p>
-        {SITE_NAME}: thirteen React components with no dependencies beyond React. The orbs live in <code>src/orbs/</code>; copy the folder into your app.
+        {SITE_NAME}: fourteen React components with no dependencies beyond React. The orbs live in <code>src/orbs/</code>; copy the folder into your app.
       </p>
       <nav aria-label="Footer">
         <Link to="/">Components</Link>
