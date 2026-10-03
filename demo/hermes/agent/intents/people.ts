@@ -100,7 +100,8 @@ async function answerMyHours(text: string, a: Answer): Promise<void> {
   const user = requireUser(a);
   const { now } = a.ctx;
   const range = rangeIn(text, now);
-  const report = await a.get<TimeReport>('clockify.timeEntries', { ...span(range, now), personId: user.id }, many('your hours'), { note: false });
+  const input = { ...span(range, now), personId: user.id };
+  const report = await a.get<TimeReport>('clockify.timeEntries', input, many('your hours'), { note: false });
   if (!report) return a.send([]);
   const people = await a.get<Person[]>('directory.people', {}, one('your capacity'));
   const mine = report.entries.filter((e) => e.personId === user.id);
@@ -147,7 +148,8 @@ export const personHours = intent<{ text: string; person: PersonRef }>(
       const report = await a.get<TimeReport>('clockify.timeEntries', span(range, now), many('team totals'));
       if (!report) return a.send([]);
       const total = report.teamTotals.find((t) => t.team === team) ?? report.teamTotals.find((t) => t.team === user.team);
-      return a.send([total ? `The ${total.team} team logged ${hours(total.hours)} ${range.label} in total.` : `No team hours were logged ${range.label}.`]);
+      if (!total) return a.send([`No team hours were logged ${range.label}.`]);
+      return a.send([`The ${total.team} team logged ${hours(total.hours)} ${range.label} in total.`]);
     }
 
     const input = { ...span(range, now), personId: person.id };
@@ -162,10 +164,8 @@ export const personHours = intent<{ text: string; person: PersonRef }>(
         (pct !== null ? `, against ${hours(capacity)} of capacity${soFar(range, now)} (${pct}%)` : '') +
         '.',
     ];
-    const stat: Block = {
-      kind: 'stat',
-      items: [{ label: `${person.name.split(' ')[0]}'s hours`, value: hours(total), delta: pct === null ? undefined : `${pct}% of capacity` }],
-    };
+    const delta = pct === null ? undefined : `${pct}% of capacity`;
+    const stat: Block = { kind: 'stat', items: [{ label: `${person.name.split(' ')[0]}'s hours`, value: hours(total), delta }] };
     return a.send(lines, [stat, ...byProjectTable(theirs, `${person.name}'s hours ${range.label} by project`)]);
   },
 );

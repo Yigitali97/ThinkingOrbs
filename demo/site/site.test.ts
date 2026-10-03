@@ -141,8 +141,10 @@ describe('prerendered pages', () => {
 
 describe('the static 404 page', () => {
   const shell = (name: string) =>
-    `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <title>${name}</title>\n    <meta name="description" content="x" />\n` +
-    `    <script type="module" crossorigin src="/assets/${name}.js"></script>\n  </head>\n  <body>\n    <div id="root"></div>\n  </body>\n</html>\n`;
+    '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n' +
+    `    <title>${name}</title>\n    <meta name="description" content="x" />\n` +
+    `    <script type="module" crossorigin src="/assets/${name}.js"></script>\n  </head>\n` +
+    '  <body>\n    <div id="root"></div>\n  </body>\n</html>\n';
   /** Runs the page's inline script at `path` and returns what it wrote into the head. */
   const written = (html: string, path: string) => {
     const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
@@ -150,8 +152,8 @@ describe('the static 404 page', () => {
     new Function('location', 'document', script)({ pathname: path }, { write: (s: string) => (out += s) });
     return out;
   };
-  const page = (base: string) =>
-    notFoundPage(base, { html: shell('docs'), title: 'Page not found · Docs' }, [{ prefix: 'hermes', html: shell('hermes'), title: 'Page not found · Hermes' }]);
+  const hermes = { prefix: 'hermes', html: shell('hermes'), title: 'Page not found · Hermes' };
+  const page = (base: string) => notFoundPage(base, { html: shell('docs'), title: 'Page not found · Docs' }, [hermes]);
 
   it.each([
     ['/', '/hermes/projects/zephyr', 'hermes'],

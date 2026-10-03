@@ -124,7 +124,8 @@ test('an attached image, a waiting upload and the draft outlive closing the pane
   await expect(page).toHaveURL(/\/hermes\/?$/);
   // the panel steps aside for the assistant in the page
   await expect(panel(page)).toHaveCount(0);
-  await expect.poll(loaded(page.getByRole('main').getByRole('list', { name: 'Attached' }).getByRole('img', { name: 'board.png' }))).toBe(true);
+  const inPage = page.getByRole('main').getByRole('list', { name: 'Attached' }).getByRole('img', { name: 'board.png' });
+  await expect.poll(loaded(inPage)).toBe(true);
   await expect(composer(page)).toHaveValue('half a question');
 });
 

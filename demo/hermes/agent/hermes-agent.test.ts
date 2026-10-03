@@ -188,13 +188,13 @@ describe("Daniel never receives a Product person's hours", () => {
 
 describe("one person's hours", () => {
   const monday = new Date(2026, 9, 5).getTime();
-  const hoursThisWeek = (id: string) =>
-    Math.round(c.time.filter((e) => e.personId === id && e.at >= monday && e.at <= NOW.getTime()).reduce((s, e) => s + e.hours, 0) * 10) / 10;
-  const platformTotal = () => {
-    const platform = new Set(c.people.filter((p) => p.team === 'Platform').map((p) => p.id));
-    const total = c.time.filter((e) => platform.has(e.personId) && e.at >= monday && e.at <= NOW.getTime()).reduce((s, e) => s + e.hours, 0);
-    return `${(Math.round(total * 10) / 10).toLocaleString('en-US')} h`;
+  const thisWeek = (ids: Set<string>) => {
+    const entries = c.time.filter((e) => ids.has(e.personId) && e.at >= monday && e.at <= NOW.getTime());
+    return Math.round(entries.reduce((s, e) => s + e.hours, 0) * 10) / 10;
   };
+  const hoursThisWeek = (id: string) => thisWeek(new Set([id]));
+  const platform = new Set(c.people.filter((p) => p.team === 'Platform').map((p) => p.id));
+  const platformTotal = () => `${thisWeek(platform).toLocaleString('en-US')} h`;
 
   it.each(['How many hours did Leo work this week?', "Show me Leo's timesheet", 'How many hours did Leo Park log this week?'])(
     'shows Maya Leo’s hours against capacity: %s',

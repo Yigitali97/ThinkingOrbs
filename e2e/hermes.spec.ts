@@ -295,7 +295,12 @@ test('at 1280px the open panel leaves the header, the user menu and the page bes
   await page.goto('/hermes/team');
   await openPanel(page);
   const box = (await panel(page).boundingBox())!;
-  for (const target of [page.getByRole('button', { name: /Maya Chen/ }), page.getByRole('banner').getByRole('button', { name: 'Ask Hermes' }), page.getByRole('main').locator('table')]) {
+  const beside = [
+    page.getByRole('button', { name: /Maya Chen/ }),
+    page.getByRole('banner').getByRole('button', { name: 'Ask Hermes' }),
+    page.getByRole('main').locator('table'),
+  ];
+  for (const target of beside) {
     const b = (await target.boundingBox())!;
     expect(b.x + b.width, 'covered by the panel').toBeLessThanOrEqual(box.x);
   }

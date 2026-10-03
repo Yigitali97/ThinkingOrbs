@@ -19,7 +19,7 @@ export function visibleProjectIds(user: User, c: Company): Set<string> {
   return new Set(projects.map((p) => p.id));
 }
 
-/** Whether the user may see this person's individual hours: anyone for Leadership, their own team for a Manager, themself for a Developer. */
+/** Whether the user may see this person's own hours: anyone's for Leadership, their team's for a Manager, their own for a Developer. */
 export function seesHoursOf(user: User, person: { id: string; team: string }): boolean {
   if (user.role === 'leadership') return true;
   if (user.role === 'manager') return person.team === user.team;

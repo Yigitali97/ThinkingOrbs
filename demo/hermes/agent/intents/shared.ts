@@ -149,7 +149,11 @@ export function teamIn(text: string): string | null {
 }
 
 /** The people Hermes recognizes by first or full name. Names and teams only: anyone's hours still come through the policy. */
-export const PERSON_NAMES: { id: string; name: string; team: string }[] = COMPANY.people.map((p) => ({ id: p.id, name: p.name, team: p.team }));
+export const PERSON_NAMES: { id: string; name: string; team: string }[] = COMPANY.people.map((p) => ({
+  id: p.id,
+  name: p.name,
+  team: p.team,
+}));
 export type PersonRef = (typeof PERSON_NAMES)[number];
 
 /** The person named in the text by full or first name ("Leo", "Leo Park", "Leo's"). */

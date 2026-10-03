@@ -39,7 +39,9 @@ export function useChat(agent: Agent, { onReplyDone }: { onReplyDone?: () => voi
   useEffect(
     () => () => {
       abortRef.current?.abort();
-      for (const m of messagesRef.current) if (m.role === 'user') m.attachments.forEach((a) => a.url?.startsWith('blob:') && URL.revokeObjectURL(a.url));
+      for (const m of messagesRef.current) {
+        if (m.role === 'user') m.attachments.forEach((a) => a.url?.startsWith('blob:') && URL.revokeObjectURL(a.url));
+      }
     },
     []
   );
