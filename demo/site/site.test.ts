@@ -24,9 +24,9 @@ describe('routes', () => {
     expect(pageMeta('/nope')).toBeNull();
   });
 
-  it('lists each of the thirteen orbs once, in a known group, matching an export', () => {
-    expect(COMPONENTS).toHaveLength(13);
-    expect(new Set(COMPONENTS.map((c) => c.slug)).size).toBe(13);
+  it('lists each of the fourteen orbs once, in a known group, matching an export', () => {
+    expect(COMPONENTS).toHaveLength(14);
+    expect(new Set(COMPONENTS.map((c) => c.slug)).size).toBe(14);
     for (const c of COMPONENTS) {
       expect(GROUPS).toContain(c.group);
       expect(orbs, c.name).toHaveProperty(c.name);
@@ -57,7 +57,14 @@ describe('docs', () => {
   it('every playground entry has a component page', () => {
     const names = COMPONENTS.map((c) => c.name);
     for (const e of ENTRIES) expect(names).toContain(e.name);
-    expect(ENTRIES).toHaveLength(13);
+    expect(ENTRIES).toHaveLength(14);
+  });
+
+  it('documents BotOrb: a Chat page, a docs entry with its states, and a playground entry', () => {
+    const bot = COMPONENTS.find((c) => c.slug === 'bot-orb');
+    expect(bot).toMatchObject({ name: 'BotOrb', group: 'Chat', tint: '#8b7cff' });
+    expect(DOCS['bot-orb'].states!.rows.map((r) => r.name)).toEqual(orbs.BOT_STATES);
+    expect(ENTRIES.map((e) => e.name)).toContain('BotOrb');
   });
 });
 

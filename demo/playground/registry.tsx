@@ -6,6 +6,9 @@ import {
   ASSISTANT_COLORS,
   AssistantOrb,
   AssistantState,
+  BOT_STATES,
+  BotOrb,
+  BotState,
   GazeOrb,
   IngestOrb,
   IngestStatus,
@@ -338,6 +341,32 @@ export const ENTRIES: Entry[] = [
     ],
     Preview: ({ v }) => <MascotOrb size={v.size as number} color={v.color as string} blinking={v.blinking as boolean} bouncy={v.bouncy as boolean} />,
     code: (v, changed) => tag('MascotOrb', ['size', 'color', 'blinking', 'bouncy'].map((k) => attr(v, changed, k))),
+  },
+  {
+    name: 'BotOrb',
+    blurb: 'A robot on a glowing pedestal that shows what the assistant is doing.',
+    controls: [
+      { key: 'state', label: 'State', type: 'select', options: BOT_STATES, init: 'thinking', def: 'idle' },
+      { key: 'size', label: 'Size', type: 'range', min: 56, max: 320, step: 4, init: 240, def: 160 },
+      { key: 'pedestal', label: 'Pedestal', type: 'toggle', init: true, def: true },
+      { key: 'level', label: 'Audio level (simulated)', type: 'range', min: 0, max: 1, step: 0.05, init: 0.6, def: null },
+    ],
+    Preview: ({ v }) => {
+      const getLevel = useLevel(v.level as number);
+      return <BotOrb state={v.state as BotState} size={v.size as number} pedestal={v.pedestal as boolean} getLevel={getLevel} />;
+    },
+    code: (v, changed) => {
+      const voiced = v.state === 'listening' || v.state === 'speaking';
+      return (
+        tag('BotOrb', [
+          attr(v, changed, 'state'),
+          attr(v, changed, 'size'),
+          attr(v, changed, 'pedestal'),
+          ['getLevel', voiced ? '{() => level}' : null],
+        ]) +
+        (voiced ? '\n// level: your audio level 0..1 — or pass stream={mic.stream}' : '')
+      );
+    },
   },
   {
     name: 'GazeOrb',

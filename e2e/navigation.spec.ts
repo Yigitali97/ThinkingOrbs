@@ -30,7 +30,7 @@ test('the site opens on the components, and nav links change pages without a rel
   await expect(page.locator('h1')).toHaveText(COMPONENTS[0].name);
 });
 
-test('a component page marks its section, and prev/next walk through all thirteen', async ({ page }) => {
+test('a component page marks its section, and prev/next walk through every component', async ({ page }) => {
   await page.goto(`/components/${COMPONENTS[0].slug}`);
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Components' })).toHaveAttribute('aria-current', 'true');
   for (let i = 1; i < COMPONENTS.length; i++) {

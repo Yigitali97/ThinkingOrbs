@@ -1,8 +1,8 @@
 # ThinkingOrbs
 
-Animated orb components for AI interfaces — thirteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
+Animated orb components for AI interfaces — fourteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
 
-Every orb is drawn on a `<canvas>` and is driven by **real data** where it can be — audio level, streamed tokens, tool calls, sources, upload progress, reasoning steps, image pixels, video frames — instead of a canned loop.
+Every orb but one is drawn on a `<canvas>` (BotOrb is SVG and CSS), and each is driven by **real data** where it can be — audio level, streamed tokens, tool calls, sources, upload progress, reasoning steps, image pixels, video frames — instead of a canned loop.
 
 - **React 17+**, TypeScript, no dependencies beyond React
 - Works with Vite, Create React App and Next.js (components are marked `'use client'`)
@@ -23,7 +23,7 @@ const mic = useMicrophone();
 - [Getting started](#getting-started)
 - Components
   - Voice: [AssistantOrb](#assistantorb) · [VoiceOrb](#voiceorb)
-  - Chat: [StatusOrb](#statusorb) · [TokenOrb](#tokenorb) · [ToolOrb](#toolorb) · [AskOrb](#askorb) · [MascotOrb](#mascotorb) · [GazeOrb](#gazeorb)
+  - Chat: [StatusOrb](#statusorb) · [TokenOrb](#tokenorb) · [ToolOrb](#toolorb) · [AskOrb](#askorb) · [MascotOrb](#mascotorb) · [BotOrb](#botorb) · [GazeOrb](#gazeorb)
   - Search: [SearchOrb](#searchorb)
   - Files & reasoning: [IngestOrb](#ingestorb) · [ReasoningOrb](#reasoningorb) · [VisionOrb](#visionorb) · [ReelOrb](#reelorb)
 - [Helpers](#helpers)
@@ -45,6 +45,7 @@ const mic = useMicrophone();
 | Agent calling tools | **ToolOrb** | list of tool calls |
 | Full ask → answer flow | **AskOrb** | your agent's stages |
 | Assistant persona / mascot | **MascotOrb**, **GazeOrb** | pointer + clicks |
+| Assistant character | **BotOrb** | `state` + audio |
 | AI search | **SearchOrb** | `phase` + found sources |
 | File upload / ingestion | **IngestOrb** | upload `progress` |
 | Deep reasoning | **ReasoningOrb** | reasoning steps + budget |
@@ -242,6 +243,38 @@ mascot.current?.bounce(); // e.g. when a reply arrives
 | `label` | `string \| null` | `'Orb mascot'` | |
 
 Ref: `blink()`, `bounce(strength?: number)`.
+
+#### BotOrb
+
+A friendly robot that floats on a glowing pedestal and shows what the assistant is doing. Its dark visor carries the face: eyes that blink and glance toward the pointer while idle, pulsing ear lights and sound rings while listening, a spinning arc with sparks circling the head while thinking, a waveform while speaking, smiling eyes and a hop when an answer lands, and amber alert eyes with a short shake on error. It is SVG and CSS rather than a canvas, so it stays sharp at any size, down to a 56px face docked beside a message box.
+
+```tsx
+const bot = useRef<BotOrbRef>(null);
+<BotOrb ref={bot} state="thinking" size={220} />
+<BotOrb state="speaking" stream={ttsStream} /> // listening and speaking follow real audio
+bot.current?.bounce(); // e.g. when a reply lands
+```
+
+| State | Face | Motion |
+|---|---|---|
+| `idle` | eyes | gentle float, blinks, glances toward the pointer |
+| `listening` | eyes | ear lights pulse with the audio, sound rings ripple out |
+| `thinking` | spinning arc | sparks circle the head |
+| `speaking` | waveform | bars follow the audio (or a built-in pattern) |
+| `happy` | smiling eyes | one hop |
+| `error` | amber alert eyes | a short shake |
+
+| Prop | Type | Default | |
+|---|---|---|---|
+| `state` | `BotState` | `'idle'` | one of the states above (`BOT_STATES` lists them) |
+| `size` | `number` | `160` | below 72 the pedestal hides and the face fills the frame |
+| `pedestal` | `boolean` | `true` | the glowing ring pedestal under the bot |
+| `stream` | `MediaStream \| null` | `null` | audio to react to while listening or speaking |
+| `getLevel` | `() => number` | — | alternative to `stream`: polled every frame, return 0–1 |
+| `level` | `number` | — | loudness 0–1 from your own meter; `stream` and `getLevel` win |
+| `label` | `string \| null` | `'Assistant'` | `null` hides it from assistive tech |
+
+Ref: `bounce()`, `blink()`. The wrapper carries `data-bot` and `data-state`; a polite caption (`botCaption(state)`: Ready, Listening, Thinking…) announces each state. With `prefers-reduced-motion` the bot stops floating, pulsing and orbiting, and states change with a fade.
 
 #### GazeOrb
 
@@ -553,6 +586,7 @@ src/orbs/
   status/           StatusOrb
   gaze/             GazeOrb
   mascot/           MascotOrb
+  bot/              BotOrb (SVG and CSS)
   voice/            VoiceOrb, useMicrophone
   assistant/        AssistantOrb
   token/            TokenOrb
@@ -572,4 +606,4 @@ demo/               the demo site (main.tsx, samples.ts)
 e2e/                browser tests (Playwright)
 ```
 
-Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`.
+Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`; `bot/` has its SVG component and a stylesheet instead of an engine.

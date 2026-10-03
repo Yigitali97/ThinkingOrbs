@@ -181,3 +181,4 @@ export async function fakeMicrophone(page: Page, { deny = false } = {}) {
     };
   }, deny);
 }
+

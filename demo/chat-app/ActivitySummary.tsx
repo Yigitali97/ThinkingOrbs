@@ -79,6 +79,8 @@ export function ActivitySummary({ reply }: { reply: Reply }) {
   // a single activity needs no timeline: its sentence is already the heading
   const single = reply.activities.length === 1;
   const total = (reply.firstTextAt ?? reply.endedAt ?? reply.startedAt) - reply.startedAt;
+  // "Thought for 4s" already says how long it took; a second time beside it would only disagree with it
+  const timed = !reply.activities.some((a) => a.kind === 'thinking');
 
   return (
     <div className="ca-summary">
@@ -89,7 +91,7 @@ export function ActivitySummary({ reply }: { reply: Reply }) {
           ))}
         </span>
         <span>{sentence}</span>
-        <span className="ca-summary-time">{seconds(total)}</span>
+        {timed && <span className="ca-summary-time">{seconds(total)}</span>}
         <svg className="ca-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
           <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

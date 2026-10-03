@@ -12,3 +12,4 @@ export * from './ingest';
 export * from './reasoning';
 export * from './vision';
 export * from './reel';
+export * from './bot';
