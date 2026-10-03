@@ -23,7 +23,11 @@ test('the user menu switches user and signs out', async ({ page }) => {
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/team');
   const menu = page.getByRole('button', { name: /Maya Chen/ });
+  // aria-controls points at the menu only while it exists
+  await expect(menu).not.toHaveAttribute('aria-controls');
   await menu.click();
+  const controls = await menu.getAttribute('aria-controls');
+  await expect(page.locator(`[id="${controls}"]`)).toHaveRole('menu');
   await page.getByRole('menuitem', { name: /Switch demo user.*Daniel Okafor/ }).click();
   await expect(page.getByRole('button', { name: /Daniel Okafor/ })).toBeVisible();
 
@@ -350,6 +354,9 @@ test('switching user while a reply is still being written leaves an empty thread
   await ask(page, 'How is the team doing?');
   // the question is in; do not wait for the reply
   await expect(panel(page).locator('[data-turn]')).toHaveCount(1);
+  // and the reply is still being worked out or written, not finished, as the switch starts
+  await expect(panel(page).locator('[data-turn]')).toHaveAttribute('data-turn', /^(working|writing)$/);
+  await expect(panel(page).getByRole('button', { name: 'Stop' })).toBeVisible();
 
   await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
 

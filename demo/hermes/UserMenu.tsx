@@ -61,7 +61,7 @@ export function UserMenu({ user }: { user: User }) {
         className="user-button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls="user-menu-list"
+        aria-controls={open ? 'user-menu-list' : undefined}
         onClick={() => setOpen((o) => !o)}
       >
         <span className="user-button-text">
