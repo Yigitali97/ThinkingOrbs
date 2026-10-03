@@ -25,7 +25,8 @@ export type Block =
   | { kind: 'draft'; channel: 'teams' | 'email'; to?: string; subject?: string; body: string }
   | { kind: 'link'; label: string; href: string };
 
-export type AssistantEvent = AgentEvent | { type: 'block'; block: Block };
+/** `open` asks the site to show a view (a route or canvas href); it never changes the reply. */
+export type AssistantEvent = AgentEvent | { type: 'block'; block: Block } | { type: 'open'; href: string };
 
 export interface PageContext {
   page: string;
@@ -82,6 +83,8 @@ export interface AgentDefinition {
   scope: string;
   tools: Tool[];
   brain: Brain;
+  /** an optional opening briefing, run once with empty input on an empty conversation */
+  brief?: Brain;
   greeting(user?: User): string;
   suggestions(page: PageContext, user?: User): string[];
   policy?: Policy;

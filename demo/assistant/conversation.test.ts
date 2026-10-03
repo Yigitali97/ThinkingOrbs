@@ -1,19 +1,32 @@
-// Tests for the conversation store: sending, stopping, replacing a running reply, archive and dispose.
+// Tests for the conversation store: sending, stopping, replacing a running reply, archive, dispose, the brief and open events.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChatAttachment } from '../chat-app/agent';
 import { say } from './brain';
 import { createConversation } from './conversation';
 import type { AgentDefinition, Brain } from './protocol';
-import { createAssistantReply } from './reply';
+import { applyAssistantEvent, createAssistantReply } from './reply';
 import { speakable } from './speakable';
 import { voiceResponder } from './voice';
 
 let lastSignal: AbortSignal | undefined;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 const brain: Brain = async ({ text }, _ctx, emit, signal) => {
   lastSignal = signal;
   if (text === 'boom') throw new Error('Kaboom');
+  if (text === 'open') {
+    emit({ type: 'open', href: '/x' });
+    await say(emit, 'Opened.', signal, 5);
+    return;
+  }
+  if (text === 'open late') {
+    // ignores the signal on purpose, so it emits after being stopped
+    await sleep(30);
+    emit({ type: 'open', href: '/late' });
+    return;
+  }
   if (text === 'slow') {
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(resolve, 200);
@@ -28,17 +41,40 @@ const brain: Brain = async ({ text }, _ctx, emit, signal) => {
   await say(emit, 'one two three', signal, 5);
 };
 
+let briefSlow = false;
+let briefInput: { text: string; attachments: ChatAttachment[] } | undefined;
+let briefSignal: AbortSignal | undefined;
+let briefRuns = 0;
+
+const brief: Brain = async (input, _ctx, emit, signal) => {
+  briefRuns++;
+  briefInput = input;
+  briefSignal = signal;
+  if (briefSlow) {
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(resolve, 200);
+      signal.addEventListener('abort', () => {
+        clearTimeout(t);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    });
+  }
+  await say(emit, 'Good morning, here is your day', signal, 5);
+};
+
 const def: AgentDefinition = {
   id: 'fake',
   name: 'Fake',
   scope: 'tests',
   tools: [],
   brain,
+  brief,
   greeting: () => 'Hi',
   suggestions: () => [],
 };
 
-const make = () => createConversation(def, { page: () => ({ page: 'home', title: 'Home' }), latency: () => 0 });
+const make = (onOpen?: (href: string) => void, agent: AgentDefinition = def) =>
+  createConversation(agent, { page: () => ({ page: 'home', title: 'Home' }), latency: () => 0, onOpen });
 
 describe('createConversation', () => {
   it('sends and finishes a reply', async () => {
@@ -125,6 +161,139 @@ describe('createConversation', () => {
     await p;
     expect(lastSignal?.aborted).toBe(true);
     expect(calls).toBe(before);
+  });
+});
+
+describe('startBrief', () => {
+  afterEach(() => {
+    briefSlow = false;
+    briefRuns = 0;
+  });
+
+  it("runs the agent's brief with empty input as a brief turn with no question", async () => {
+    const c = make();
+    const reply = await c.startBrief();
+    expect(reply?.state).toBe('done');
+    expect(reply?.text).toBe('Good morning, here is your day');
+    expect(briefInput).toEqual({ text: '', attachments: [] });
+    const { turns, busy } = c.getSnapshot();
+    expect(turns.map((t) => [t.question, t.brief, t.reply.state])).toEqual([['', true, 'done']]);
+    expect(busy).toBe(false);
+  });
+
+  it('runs only once per conversation', async () => {
+    const c = make();
+    await c.startBrief();
+    expect(await c.startBrief()).toBeNull();
+    expect(briefRuns).toBe(1);
+  });
+
+  it('does nothing once there are turns', async () => {
+    const c = make();
+    await c.send('hi');
+    expect(await c.startBrief()).toBeNull();
+    expect(briefRuns).toBe(0);
+    expect(c.getSnapshot().turns).toHaveLength(1);
+  });
+
+  it('does nothing when the agent has no brief', async () => {
+    const c = make(undefined, { ...def, brief: undefined });
+    expect(await c.startBrief()).toBeNull();
+    expect(c.getSnapshot().turns).toEqual([]);
+  });
+
+  it('is stopped by a message sent while it runs', async () => {
+    briefSlow = true;
+    const c = make();
+    const b = c.startBrief();
+    const hi = c.send('hi');
+    expect((await b)?.state).toBe('stopped');
+    expect((await hi)?.state).toBe('done');
+    const { turns, busy } = c.getSnapshot();
+    expect(turns.map((t) => [t.brief ? 'brief' : t.question, t.reply.state])).toEqual([
+      ['brief', 'stopped'],
+      ['hi', 'done'],
+    ]);
+    expect(busy).toBe(false);
+  });
+
+  it('archives nothing when the conversation only has the brief', async () => {
+    const c = make();
+    await c.startBrief();
+    c.clear();
+    expect(c.getSnapshot()).toMatchObject({ turns: [], archive: [] });
+  });
+
+  it('titles an archived conversation by its first question and never re-runs the brief on restore', async () => {
+    const c = make();
+    await c.startBrief();
+    await c.send('hi');
+    c.clear();
+    const { archive } = c.getSnapshot();
+    expect(archive.map((a) => a.title)).toEqual(['hi']);
+    c.restore(archive[0].id);
+    expect(c.getSnapshot().turns.map((t) => [t.brief ?? false, t.question])).toEqual([
+      [true, ''],
+      [false, 'hi'],
+    ]);
+    expect(await c.startBrief()).toBeNull();
+    expect(briefRuns).toBe(1);
+  });
+
+  it('can brief again after clear', async () => {
+    const c = make();
+    await c.startBrief();
+    c.clear();
+    expect((await c.startBrief())?.state).toBe('done');
+    expect(briefRuns).toBe(2);
+  });
+
+  it('is aborted by dispose', async () => {
+    briefSlow = true;
+    const c = make();
+    const b = c.startBrief();
+    await sleep(10);
+    c.dispose();
+    expect((await b)?.state).toBe('stopped');
+    expect(briefSignal?.aborted).toBe(true);
+  });
+});
+
+describe('open events', () => {
+  it('hands each open event of the live run to onOpen', async () => {
+    const onOpen = vi.fn();
+    const c = make(onOpen);
+    const reply = await c.send('open');
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledWith('/x');
+    // the reply itself is untouched by the open event
+    expect(reply?.text).toBe('Opened.');
+  });
+
+  it('ignores an open event emitted after the run was stopped', async () => {
+    const onOpen = vi.fn();
+    const c = make(onOpen);
+    const p = c.send('open late');
+    await sleep(5);
+    c.stop();
+    expect((await p)?.state).toBe('stopped');
+    await sleep(50);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('ignores an open event emitted after dispose', async () => {
+    const onOpen = vi.fn();
+    const c = make(onOpen);
+    void c.send('open late');
+    await sleep(5);
+    c.dispose();
+    await sleep(50);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('leaves a reply unchanged when applied to it', () => {
+    const r = createAssistantReply('r', 0);
+    expect(applyAssistantEvent(r, { type: 'open', href: '/x' }, 10)).toBe(r);
   });
 });
 

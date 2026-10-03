@@ -1,15 +1,24 @@
 // Holds one Conversation per (agent, user) and the panel state around it: open, inline, unread, the page context and the
 // message box's draft and uploads, which outlive the panel closing, a page change and a breakpoint change.
 // Switching user or agent disposes the old conversation, which aborts its reply and clears the thread and the draft.
+// It also carries what voice mode and dictation are doing, so a bot drawn anywhere can show it, and hands `open` events to onOpen.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { AssistantState } from '../../src/orbs';
 import type { ChatAttachment } from '../chat-app/agent';
 import { useUploads } from '../chat-app/useUploads';
 import type { Upload } from '../chat-app/useUploads';
 import { createConversation } from './conversation';
 import type { Conversation, ConversationSnapshot } from './conversation';
 import type { AgentDefinition, PageContext, User } from './protocol';
+
+/** What voice mode is doing, while it is on: its orb state and the microphone stream. */
+export interface VoicePresence {
+  active: boolean;
+  state?: AssistantState;
+  stream?: MediaStream | null;
+}
 
 export interface AssistantValue {
   agent: AgentDefinition;
@@ -22,6 +31,10 @@ export interface AssistantValue {
   inline: boolean;
   setInline(on: boolean): void;
   unread: boolean;
+  voice: VoicePresence;
+  setVoice(v: VoicePresence): void;
+  dictating: boolean;
+  setDictating(on: boolean): void;
 }
 
 /** What usePageContext talks to: `register` re-renders the provider, `refresh` only updates what the brain will read. */
@@ -76,11 +89,14 @@ export function AssistantProvider({
   agent,
   user,
   now,
+  onOpen,
   children,
 }: {
   agent: AgentDefinition;
   user?: User;
   now?: () => Date;
+  /** called when the agent asks to show a view; read through a ref, so changing it never recreates the conversation */
+  onOpen?: (href: string) => void;
   children: ReactNode;
 }) {
   const [page, setPage] = useState<PageContext>(unknownPage);
@@ -89,6 +105,8 @@ export function AssistantProvider({
   nowRef.current = now;
   const userRef = useRef(user);
   userRef.current = user;
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
 
   const registry = useMemo<PageRegistry>(
     () => ({
@@ -119,6 +137,7 @@ export function AssistantProvider({
         user: userRef.current,
         page: () => pageRef.current,
         now: () => nowRef.current?.() ?? new Date(),
+        onOpen: (href) => onOpenRef.current?.(href),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [agent, userId, epoch],
@@ -181,9 +200,13 @@ export function AssistantProvider({
     [draft, uploads, attachFiles, removeUpload, takeReady],
   );
 
+  // voice mode and dictation report in from wherever they are mounted
+  const [voice, setVoice] = useState<VoicePresence>({ active: false });
+  const [dictating, setDictating] = useState(false);
+
   const value = useMemo<AssistantValue>(
-    () => ({ agent, user, conversation, snapshot, page, open, setOpen, inline, setInline, unread }),
-    [agent, user, conversation, snapshot, page, open, setOpen, inline, unread],
+    () => ({ agent, user, conversation, snapshot, page, open, setOpen, inline, setInline, unread, voice, setVoice, dictating, setDictating }),
+    [agent, user, conversation, snapshot, page, open, setOpen, inline, unread, voice, dictating],
   );
 
   return (

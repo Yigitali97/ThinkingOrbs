@@ -1,10 +1,11 @@
 // The assistant's conversation store: turns, the running reply, and a short archive of cleared conversations.
 // Plain TypeScript with no React, so it is unit-tested in node; AssistantProvider wraps it for the UI.
 // Sent attachments belong to it: their object URLs are revoked when their turns leave the archive or the store is disposed.
+// An agent's brief runs once on an empty conversation as a turn with no question; `open` events go to `onOpen`.
 
 import type { ChatAttachment } from '../chat-app/agent';
 import { createCaller } from './callTool';
-import type { AgentDefinition, AssistantEvent, PageContext, User } from './protocol';
+import type { AgentDefinition, AssistantEvent, Brain, PageContext, User } from './protocol';
 import { applyAssistantEvent, createAssistantReply, finishAssistantReply } from './reply';
 import type { AssistantReply } from './reply';
 
@@ -13,6 +14,8 @@ export interface Turn {
   question: string;
   attachments: ChatAttachment[];
   reply: AssistantReply;
+  /** the agent's opening brief: no question, nothing the user asked */
+  brief?: boolean;
 }
 export interface Archived {
   id: string;
@@ -30,6 +33,11 @@ export interface Conversation {
   subscribe(fn: () => void): () => void;
   /** Resolves with the finished reply, or null when there was nothing to send. */
   send(text: string, attachments?: ChatAttachment[]): Promise<AssistantReply | null>;
+  /**
+   * Runs the agent's brief on an empty conversation, once until the next clear(). Resolves with the finished reply,
+   * or null when the agent has no brief, there are turns already, or a brief already ran.
+   */
+  startBrief(): Promise<AssistantReply | null>;
   stop(): void;
   clear(): void;
   restore(id: string): void;
@@ -56,12 +64,21 @@ const releaseTurns = (turns: Turn[]) => turns.forEach((t) => release(t.attachmen
 
 export function createConversation(
   def: AgentDefinition,
-  opts: { user?: User; page: () => PageContext; now?: () => Date; latency?: (toolId: string) => number },
+  opts: {
+    user?: User;
+    page: () => PageContext;
+    now?: () => Date;
+    latency?: (toolId: string) => number;
+    /** called for each `open` event of the live run, never once that run is stopped or the store disposed */
+    onOpen?: (href: string) => void;
+  },
 ): Conversation {
   let snap: ConversationSnapshot = { turns: [], busy: false, archive: [] };
   const listeners = new Set<() => void>();
   let running: Run | null = null;
   let disposed = false;
+  /** a brief ran (or a conversation was restored) since the last clear(), so none runs again */
+  let briefed = false;
   let seq = 0;
   const uid = () => `t${++seq}-${Math.random().toString(36).slice(2, 7)}`;
   const clock = () => performance.now();
@@ -80,16 +97,21 @@ export function createConversation(
     running.finish('stopped');
   };
 
+  /** Files the current turns away, unless there is nothing but the brief: that is not a conversation worth keeping. */
   const archiveCurrent = (archive: Archived[]): Archived[] => {
-    if (!snap.turns.length) return archive;
-    const title = snap.turns[0].question.slice(0, TITLE_MAX);
+    const asked = snap.turns.filter((t) => !t.brief);
+    if (!asked.length) {
+      releaseTurns(snap.turns);
+      return archive;
+    }
+    const title = asked[0].question.slice(0, TITLE_MAX);
     const next = [{ id: uid(), title, turns: snap.turns }, ...archive];
     // a conversation that falls off the end can't come back, so its images go
     next.slice(ARCHIVE_MAX).forEach((a) => releaseTurns(a.turns));
     return next.slice(0, ARCHIVE_MAX);
   };
 
-  const start = (text: string, attachments: ChatAttachment[]): Promise<AssistantReply> => {
+  const start = (text: string, attachments: ChatAttachment[], brain: Brain = def.brain, brief = false): Promise<AssistantReply> => {
     const ctl = new AbortController();
     const turnId = uid();
     const reply = createAssistantReply(uid(), clock());
@@ -116,16 +138,19 @@ export function createConversation(
       },
     };
     running = run;
-    commit({ turns: [...snap.turns, { id: turnId, question: text, attachments, reply }], busy: true });
+    const turn: Turn = { id: turnId, question: text, attachments, reply, ...(brief ? { brief: true } : {}) };
+    commit({ turns: [...snap.turns, turn], busy: true });
 
     const emit = (e: AssistantEvent) => {
-      if (!ctl.signal.aborted) updateReply(turnId, (r) => applyAssistantEvent(r, e, clock()));
+      if (ctl.signal.aborted || run.finished) return;
+      if (e.type === 'open') opts.onOpen?.(e.href);
+      else updateReply(turnId, (r) => applyAssistantEvent(r, e, clock()));
     };
     const now = opts.now?.() ?? new Date();
     const call = createCaller(def, { user: opts.user, now, emit, signal: ctl.signal, latency: opts.latency });
     const ctx = { page: opts.page(), user: opts.user, now, call };
 
-    def.brain({ text, attachments }, ctx, emit, ctl.signal).then(
+    brain({ text, attachments }, ctx, emit, ctl.signal).then(
       () => run.finish(ctl.signal.aborted ? 'stopped' : 'done'),
       (err) => (ctl.signal.aborted ? run.finish('stopped') : run.finish('error', err instanceof Error ? err.message : 'Something went wrong.')),
     );
@@ -159,9 +184,15 @@ export function createConversation(
       }
       return start(question, attachments);
     },
+    async startBrief() {
+      if (disposed || !def.brief || briefed || snap.turns.length || running) return null;
+      briefed = true;
+      return start('', [], def.brief, true);
+    },
     stop: stopRun,
     clear() {
       stopRun();
+      briefed = false;
       if (!snap.turns.length) return;
       commit({ turns: [], archive: archiveCurrent(snap.archive) });
     },
@@ -169,6 +200,7 @@ export function createConversation(
       const target = snap.archive.find((a) => a.id === id);
       if (!target) return;
       stopRun();
+      briefed = true;
       commit({ turns: target.turns, archive: archiveCurrent(snap.archive.filter((a) => a.id !== id)) });
     },
     dispose() {

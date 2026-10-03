@@ -1,6 +1,6 @@
 // Hands-free voice mode: an orb that listens, thinks and speaks, with a caption of what was heard. Answers still land in the thread.
 // It replaces the message box while it is on; End voice mode stops the loop. While it thinks or speaks, the orb is a button
-// that interrupts, by tap or from the keyboard.
+// that interrupts, by tap or from the keyboard. While mounted it reports its state and stream to the provider, for the bot.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { ASSISTANT_COLORS, AssistantOrb } from '../../src/orbs';
@@ -20,7 +20,7 @@ const LABELS = {
 } as const;
 
 export function VoiceMode({ onEnd }: { onEnd: () => void }) {
-  const { conversation } = useAssistant();
+  const { conversation, setVoice } = useAssistant();
   const respond = useMemo(() => voiceResponder(conversation), [conversation]);
   const va = useVoiceAssistant({ respond });
   const endRef = useRef<HTMLButtonElement>(null);
@@ -37,6 +37,12 @@ export function VoiceMode({ onEnd }: { onEnd: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // the provider hears what voice mode is doing while it's on, and that it is off once it's gone
+  useEffect(() => {
+    setVoice({ active: true, state: va.state, stream: va.stream });
+  }, [setVoice, va.state, va.stream]);
+  useEffect(() => () => setVoice({ active: false }), [setVoice]);
 
   const status = va.error && va.state === 'error' ? va.error : LABELS[va.state];
 

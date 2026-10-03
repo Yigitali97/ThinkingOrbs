@@ -1,5 +1,6 @@
 // The conversation as a list of turns: your question, the live activity row while the reply works, then the folded
 // activity summary, the streamed answer and its blocks. Only the latest answer is a live region for screen readers.
+// The agent's brief has no question, so it shows only its answer.
 
 import { ActivityRow } from '../chat-app/ActivityRow';
 import { ActivitySummary } from '../chat-app/ActivitySummary';
@@ -74,7 +75,7 @@ export function Thread({ turns }: { turns: Turn[] }) {
     <ol className="as-thread" aria-label="Conversation">
       {turns.map((t, i) => (
         <li key={t.id} className="as-turn" data-turn={t.reply.state}>
-          <Question turn={t} />
+          {!t.brief && <Question turn={t} />}
           <Reply turn={t} latest={i === turns.length - 1} />
         </li>
       ))}

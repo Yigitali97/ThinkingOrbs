@@ -1,6 +1,6 @@
 // The assistant's message box: attachments, dictation, and Send (Stop while a reply runs). Enter sends, Shift+Enter is a new line.
 // Sending while a reply runs stops that reply first; the conversation store takes care of the order. The draft and uploads
-// live in AssistantProvider, so they survive this box unmounting.
+// live in AssistantProvider, so they survive this box unmounting. Whether dictation is on is reported there too, for the bot.
 
 import { KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from 'react';
 import { VoiceOrb } from '../../src/orbs';
@@ -19,7 +19,7 @@ export function focusComposer(): boolean {
 const MAX_HEIGHT = 160;
 
 export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElement> }) {
-  const { agent, conversation, snapshot } = useAssistant();
+  const { agent, conversation, snapshot, setDictating } = useAssistant();
   const { draft, setDraft, uploads, attachFiles, removeUpload, takeReady } = useComposerDraft();
   const dictation = useDictation(setDraft);
   const [voice, setVoice] = useState(false);
@@ -39,6 +39,12 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
   }, [draft, textRef]);
+
+  // the provider knows when this box is dictating, and that it isn't once the box is gone
+  useEffect(() => {
+    setDictating(dictation.active);
+  }, [setDictating, dictation.active]);
+  useEffect(() => () => setDictating(false), [setDictating]);
 
   // ending voice mode puts you back in the message box
   const wasVoice = useRef(false);
