@@ -1,5 +1,6 @@
 // Simulated file uploads for a composer: attach, progress, remove, and take the finished ones.
 // Shared by the chat sample and the assistant panel so the IngestOrb has real progress to show.
+// Image previews are object URLs: this hook revokes the ones still in its list; takeReady hands the rest to the caller.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IngestStatus } from '../../src/orbs';
@@ -17,13 +18,18 @@ export function useUploads() {
   // latest rendered uploads, readable from callbacks without stale closures
   const uploadsRef = useRef(uploads);
   uploadsRef.current = uploads;
-  const urls = useRef<string[]>([]);
+  // object URLs of uploads still in the list; a URL leaves this set when its upload is removed (revoked) or taken (handed over)
+  const urls = useRef(new Set<string>());
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const revoke = (url?: string) => {
+    if (url && urls.current.delete(url)) URL.revokeObjectURL(url);
+  };
 
   useEffect(
     () => () => {
       timers.current.forEach(clearTimeout);
       urls.current.forEach((u) => URL.revokeObjectURL(u));
+      urls.current.clear();
     },
     []
   );
@@ -49,7 +55,7 @@ export function useUploads() {
       addUploads(
         Array.from(files).map((file) => {
           const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-          if (url) urls.current.push(url);
+          if (url) urls.current.add(url);
           return { id: uid(), name: file.name, type: file.type, size: file.size, file, url };
         })
       );
@@ -57,15 +63,28 @@ export function useUploads() {
     [addUploads]
   );
 
-  const removeUpload = useCallback((id: string) => setUploads((list) => list.filter((u) => u.id !== id)), []);
+  const removeUpload = useCallback((id: string) => {
+    revoke(uploadsRef.current.find((u) => u.id === id)?.url);
+    setUploads((list) => list.filter((u) => u.id !== id));
+  }, []);
 
-  /** The finished uploads as attachments; removes them from the list. */
+  /** Drops every upload in the list and revokes its preview. */
+  const clearUploads = useCallback(() => {
+    uploadsRef.current.forEach((u) => revoke(u.url));
+    setUploads([]);
+  }, []);
+
+  /**
+   * The finished uploads as attachments; removes them from the list. Their preview URLs now belong to the caller,
+   * which revokes them once nothing shows the attachment any more.
+   */
   const takeReady = useCallback((): ChatAttachment[] => {
     const ready = uploadsRef.current.filter((u) => u.status === 'done');
     if (!ready.length) return [];
+    for (const u of ready) if (u.url) urls.current.delete(u.url);
     setUploads((list) => list.filter((u) => u.status !== 'done'));
     return ready.map(({ progress: _p, status: _s, ...att }) => att);
   }, []);
 
-  return { uploads, attachFiles, addUploads, removeUpload, takeReady };
+  return { uploads, attachFiles, addUploads, removeUpload, clearUploads, takeReady };
 }

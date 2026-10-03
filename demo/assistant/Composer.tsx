@@ -1,11 +1,11 @@
 // The assistant's message box: attachments, dictation, and Send (Stop while a reply runs). Enter sends, Shift+Enter is a new line.
-// Sending while a reply runs stops that reply first; the conversation store takes care of the order.
+// Sending while a reply runs stops that reply first; the conversation store takes care of the order. The draft and uploads
+// live in AssistantProvider, so they survive this box unmounting.
 
 import { KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from 'react';
 import { VoiceOrb } from '../../src/orbs';
 import { useDictation } from '../chat-app/useDictation';
-import { useUploads } from '../chat-app/useUploads';
-import { useAssistant } from './AssistantProvider';
+import { useAssistant, useComposerDraft } from './AssistantProvider';
 import { VoiceMode } from './VoiceMode';
 import { voiceSupported } from './voice';
 
@@ -20,8 +20,7 @@ const MAX_HEIGHT = 160;
 
 export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElement> }) {
   const { agent, conversation, snapshot } = useAssistant();
-  const [draft, setDraft] = useState('');
-  const { uploads, attachFiles, removeUpload, takeReady } = useUploads();
+  const { draft, setDraft, uploads, attachFiles, removeUpload, takeReady } = useComposerDraft();
   const dictation = useDictation(setDraft);
   const [voice, setVoice] = useState(false);
   const canVoice = voiceSupported();

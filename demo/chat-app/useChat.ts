@@ -32,10 +32,14 @@ export function useChat(agent: Agent, { onReplyDone }: { onReplyDone?: () => voi
   const pending = useRef<{ text: string; ids: string[] } | null>(null);
   const onDone = useRef(onReplyDone);
   onDone.current = onReplyDone;
+  // sent attachments' preview URLs belong to the messages, so they go when the chat does
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   useEffect(
     () => () => {
       abortRef.current?.abort();
+      for (const m of messagesRef.current) if (m.role === 'user') m.attachments.forEach((a) => a.url?.startsWith('blob:') && URL.revokeObjectURL(a.url));
     },
     []
   );

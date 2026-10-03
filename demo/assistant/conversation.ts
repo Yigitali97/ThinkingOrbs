@@ -1,5 +1,6 @@
 // The assistant's conversation store: turns, the running reply, and a short archive of cleared conversations.
 // Plain TypeScript with no React, so it is unit-tested in node; AssistantProvider wraps it for the UI.
+// Sent attachments belong to it: their object URLs are revoked when their turns leave the archive or the store is disposed.
 
 import type { ChatAttachment } from '../chat-app/agent';
 import { createCaller } from './callTool';
@@ -47,6 +48,12 @@ interface Run {
   finish(outcome: 'done' | 'stopped' | 'error', error?: string): void;
 }
 
+/** Revokes the object URLs of attachments nothing will show again. */
+function release(attachments: ChatAttachment[]): void {
+  for (const a of attachments) if (a.url?.startsWith('blob:')) URL.revokeObjectURL(a.url);
+}
+const releaseTurns = (turns: Turn[]) => turns.forEach((t) => release(t.attachments));
+
 export function createConversation(
   def: AgentDefinition,
   opts: { user?: User; page: () => PageContext; now?: () => Date; latency?: (toolId: string) => number },
@@ -76,7 +83,10 @@ export function createConversation(
   const archiveCurrent = (archive: Archived[]): Archived[] => {
     if (!snap.turns.length) return archive;
     const title = snap.turns[0].question.slice(0, TITLE_MAX);
-    return [{ id: uid(), title, turns: snap.turns }, ...archive].slice(0, ARCHIVE_MAX);
+    const next = [{ id: uid(), title, turns: snap.turns }, ...archive];
+    // a conversation that falls off the end can't come back, so its images go
+    next.slice(ARCHIVE_MAX).forEach((a) => releaseTurns(a.turns));
+    return next.slice(0, ARCHIVE_MAX);
   };
 
   const start = (text: string, attachments: ChatAttachment[]): Promise<AssistantReply> => {
@@ -133,14 +143,20 @@ export function createConversation(
     },
     async send(text, attachments = []) {
       const question = text.trim();
-      if (disposed || (!question && !attachments.length)) return null;
+      if (disposed || (!question && !attachments.length)) {
+        release(attachments);
+        return null;
+      }
       // a running reply is stopped and settled before the new one starts
       while (running) {
         const current: Run = running;
         stopRun();
         await current.done;
       }
-      if (disposed) return null;
+      if (disposed) {
+        release(attachments);
+        return null;
+      }
       return start(question, attachments);
     },
     stop: stopRun,
@@ -156,9 +172,12 @@ export function createConversation(
       commit({ turns: target.turns, archive: archiveCurrent(snap.archive.filter((a) => a.id !== id)) });
     },
     dispose() {
+      if (disposed) return;
       disposed = true;
       listeners.clear();
       stopRun();
+      releaseTurns(snap.turns);
+      snap.archive.forEach((a) => releaseTurns(a.turns));
     },
   };
 }

@@ -83,6 +83,70 @@ test('the conversation and a running answer survive a page change', async ({ pag
   await expect(page).toHaveURL(/\/hermes\/projects$/);
 });
 
+// a real 1×1 PNG, so a thumbnail that still loads has a natural width
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+const loaded = (img: ReturnType<Page['locator']>) => () => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0);
+
+test('an attached image, a waiting upload and the draft outlive closing the panel and changing page', async ({ page, isMobile }) => {
+  const open = () => page.getByRole('button', { name: 'Open Hermes' }).click();
+  const files = () => page.locator('.as-composer input[type="file"]');
+  await open();
+  await files().setInputFiles({ name: 'board.png', mimeType: 'image/png', buffer: PNG });
+  await expect(panel(page).getByText('Ready')).toBeVisible();
+  await ask(page, 'How is the team doing?');
+  await expect(panel(page).locator('[data-turn="done"]')).toHaveCount(1);
+  const thumb = page.getByRole('list', { name: 'Attached' }).getByRole('img', { name: 'board.png' });
+  await expect.poll(loaded(thumb)).toBe(true);
+
+  // a second image waits in the message box, with a half-written question
+  await files().setInputFiles({ name: 'chart.png', mimeType: 'image/png', buffer: PNG });
+  await expect(panel(page).getByText('Ready')).toBeVisible();
+  await composer(page).fill('half a question');
+
+  // close and reopen the panel
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
+  await open();
+  await expect.poll(loaded(thumb)).toBe(true);
+  await expect(composer(page)).toHaveValue('half a question');
+  await expect.poll(loaded(page.getByRole('list', { name: 'Attachments' }).locator('img'))).toBe(true);
+
+  // change page (the phone's sheet is modal, so close it first)
+  if (isMobile) await page.keyboard.press('Escape');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
+  await expect(page).toHaveURL(/\/hermes\/projects$/);
+  if (isMobile) await open();
+  await expect.poll(loaded(thumb)).toBe(true);
+
+  // Home shows the same conversation in the page itself
+  if (isMobile) await page.keyboard.press('Escape');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
+  await expect(page).toHaveURL(/\/hermes\/?$/);
+  // the panel steps aside for the assistant in the page
+  await expect(panel(page)).toHaveCount(0);
+  await expect.poll(loaded(page.getByRole('main').getByRole('list', { name: 'Attached' }).getByRole('img', { name: 'board.png' }))).toBe(true);
+  await expect(composer(page)).toHaveValue('half a question');
+});
+
+test.describe('removing an upload', () => {
+  // reading the revoked URL back is expected to fail
+  test.use({ allowErrors: [/^blob:|ERR_FILE_NOT_FOUND/] });
+
+  test('frees its preview', async ({ page }) => {
+    await page.getByRole('button', { name: 'Open Hermes' }).click();
+    await page.locator('.as-composer input[type="file"]').setInputFiles({ name: 'board.png', mimeType: 'image/png', buffer: PNG });
+    const preview = page.getByRole('list', { name: 'Attachments' }).locator('img');
+    await expect.poll(loaded(preview)).toBe(true);
+    const url = await preview.getAttribute('src');
+    expect(url).toMatch(/^blob:/);
+    const readable = () => page.evaluate((u) => fetch(u!).then(() => true, () => false), url);
+    expect(await readable()).toBe(true);
+    await panel(page).getByRole('button', { name: 'Remove board.png' }).click();
+    await expect(page.getByRole('list', { name: 'Attachments' })).toHaveCount(0);
+    expect(await readable()).toBe(false);
+  });
+});
+
 test('a second question mid-answer stops the first', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Hermes' }).click();
   await ask(page, 'How is the team doing?');

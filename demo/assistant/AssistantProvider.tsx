@@ -1,8 +1,12 @@
-// Holds one Conversation per (agent, user) and the panel state around it: open, inline, unread and the page context.
-// Switching user or agent disposes the old conversation, which aborts its reply and clears the thread.
+// Holds one Conversation per (agent, user) and the panel state around it: open, inline, unread, the page context and the
+// message box's draft and uploads, which outlive the panel closing, a page change and a breakpoint change.
+// Switching user or agent disposes the old conversation, which aborts its reply and clears the thread and the draft.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { ReactNode } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { ChatAttachment } from '../chat-app/agent';
+import { useUploads } from '../chat-app/useUploads';
+import type { Upload } from '../chat-app/useUploads';
 import { createConversation } from './conversation';
 import type { Conversation, ConversationSnapshot } from './conversation';
 import type { AgentDefinition, PageContext, User } from './protocol';
@@ -27,12 +31,30 @@ export interface PageRegistry {
   reset(): void;
 }
 
+/** What is in the message box: kept here, so whichever composer is on screen picks up where the last one left off. */
+export interface ComposerDraft {
+  draft: string;
+  setDraft: Dispatch<SetStateAction<string>>;
+  uploads: Upload[];
+  attachFiles(files: FileList | null): void;
+  removeUpload(id: string): void;
+  /** the finished uploads, handed to the conversation, which owns them from then on */
+  takeReady(): ChatAttachment[];
+}
+
 const AssistantContext = createContext<AssistantValue | null>(null);
 const PageRegistryContext = createContext<PageRegistry | null>(null);
+const ComposerContext = createContext<ComposerDraft | null>(null);
 
 export function useAssistant(): AssistantValue {
   const value = useContext(AssistantContext);
   if (!value) throw new Error('useAssistant must be used inside <AssistantProvider>');
+  return value;
+}
+
+export function useComposerDraft(): ComposerDraft {
+  const value = useContext(ComposerContext);
+  if (!value) throw new Error('useComposerDraft must be used inside <AssistantProvider>');
   return value;
 }
 
@@ -147,6 +169,18 @@ export function AssistantProvider({
     });
   }, [conversation]);
 
+  // the message box: a new conversation (another user) starts with an empty one
+  const [draft, setDraft] = useState('');
+  const { uploads, attachFiles, removeUpload, clearUploads, takeReady } = useUploads();
+  useEffect(() => {
+    setDraft('');
+    clearUploads();
+  }, [conversation, clearUploads]);
+  const composer = useMemo<ComposerDraft>(
+    () => ({ draft, setDraft, uploads, attachFiles, removeUpload, takeReady }),
+    [draft, uploads, attachFiles, removeUpload, takeReady],
+  );
+
   const value = useMemo<AssistantValue>(
     () => ({ agent, user, conversation, snapshot, page, open, setOpen, inline, setInline, unread }),
     [agent, user, conversation, snapshot, page, open, setOpen, inline, unread],
@@ -154,7 +188,9 @@ export function AssistantProvider({
 
   return (
     <PageRegistryContext.Provider value={registry}>
-      <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>
+      <AssistantContext.Provider value={value}>
+        <ComposerContext.Provider value={composer}>{children}</ComposerContext.Provider>
+      </AssistantContext.Provider>
     </PageRegistryContext.Provider>
   );
 }

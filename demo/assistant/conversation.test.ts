@@ -1,6 +1,7 @@
 // Tests for the conversation store: sending, stopping, replacing a running reply, archive and dispose.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ChatAttachment } from '../chat-app/agent';
 import { say } from './brain';
 import { createConversation } from './conversation';
 import type { AgentDefinition, Brain } from './protocol';
@@ -124,6 +125,53 @@ describe('createConversation', () => {
     await p;
     expect(lastSignal?.aborted).toBe(true);
     expect(calls).toBe(before);
+  });
+});
+
+describe('attachment URLs', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const image = (n: number): ChatAttachment => ({ id: `a${n}`, name: `${n}.png`, type: 'image/png', size: 10, url: `blob:test/${n}` });
+  const spy = () => vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+  it('keeps a sent image alive through clear and restore', async () => {
+    const revoke = spy();
+    const c = make();
+    await c.send('look', [image(1)]);
+    c.clear();
+    c.restore(c.getSnapshot().archive[0].id);
+    expect(c.getSnapshot().turns[0].attachments[0].url).toBe('blob:test/1');
+    expect(revoke).not.toHaveBeenCalled();
+  });
+
+  it('revokes a sent image once its conversation falls out of the archive', async () => {
+    const revoke = spy();
+    const c = make();
+    await c.send('first', [image(1)]);
+    c.clear();
+    for (let i = 2; i <= 6; i++) {
+      await c.send(`q${i}`);
+      c.clear();
+      if (i < 6) expect(revoke).not.toHaveBeenCalled();
+    }
+    expect(revoke).toHaveBeenCalledWith('blob:test/1');
+  });
+
+  it('revokes every image, current and archived, on dispose', async () => {
+    const revoke = spy();
+    const c = make();
+    await c.send('one', [image(1)]);
+    c.clear();
+    await c.send('two', [image(2), { id: 'f', name: 'notes.txt', type: 'text/plain', size: 3 }]);
+    c.dispose();
+    expect(revoke.mock.calls.map(([u]) => u).sort()).toEqual(['blob:test/1', 'blob:test/2']);
+  });
+
+  it('revokes the images of a send a disposed store refuses', async () => {
+    const revoke = spy();
+    const c = make();
+    c.dispose();
+    expect(await c.send('late', [image(3)])).toBeNull();
+    expect(revoke).toHaveBeenCalledWith('blob:test/3');
   });
 });
 
