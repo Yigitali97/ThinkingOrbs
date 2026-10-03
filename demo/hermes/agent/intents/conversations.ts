@@ -4,7 +4,7 @@
 import { hasAny, normalize, parseRange } from '../../../assistant/text';
 import type { DateRange } from '../../../assistant/text';
 import type { Meeting, Message, Person } from '../../data/types';
-import { CHANNELS, PROJECT_NAMES, dayLabel, intent, lastDays, nameOf, plural, rangeIn, shortTime, span } from './shared';
+import { CHANNELS, PROJECT_NAMES, dayLabel, intent, lastDays, many, nameOf, plural, rangeIn, shortTime, span } from './shared';
 
 const KEY_HINTS = ['heads up', 'review', 'fix', 'deploy', 'blocked', 'slow', 'flaky', 'green', 'rotating', 'retry', 'need', 'still'];
 const MEETING_WORDS = ['decide', 'decided', 'decision', 'decisions', 'standup', 'stand-up', 'stand up', 'meeting', 'meetings', 'planning'];
@@ -26,7 +26,7 @@ export const meetingDecisions = intent<MeetingQuery>(
     // the user's own team's meetings unless another team is named; Leadership has no meetings of its own, so sees all
     const forTeam = team ?? (user && user.role !== 'leadership' ? user.team : undefined);
     const window = range ? span(range, now) : lastDays(now, 14);
-    const found = await a.get<Meeting[]>('teams.meetings', { kind, team: forTeam, ...window }, 'meeting notes');
+    const found = await a.get<Meeting[]>('teams.meetings', { kind, team: forTeam, ...window }, many('meeting notes'));
     if (!found) return a.send([]);
     const what = kind ?? 'meeting';
     const when = range ? range.label : 'in the last two weeks';
@@ -35,7 +35,7 @@ export const meetingDecisions = intent<MeetingQuery>(
     const meetings = range ? sorted : [...new Map(sorted.map((m) => [m.team, m])).values()];
     if (!meetings.length) return a.send([`I couldn't find ${forTeam ? `a ${forTeam} ${what}` : `a ${what}`} ${when}.`]);
 
-    const people = await a.get<Person[]>('directory.people', {}, 'names');
+    const people = await a.get<Person[]>('directory.people', {}, many('names'));
     const lines: string[] = [];
     for (const m of meetings) {
       const title = `${m.team} ${m.kind === 'standup' ? 'standup' : 'planning meeting'}`;
@@ -77,10 +77,10 @@ export const channelSummary = intent<ChannelQuery>(
     }
     const { now } = a.ctx;
     const range = rangeIn(text, now);
-    const messages = await a.get<Message[]>('teams.messages', { channel, ...span(range, now) }, `${channel} messages`);
+    const messages = await a.get<Message[]>('teams.messages', { channel, ...span(range, now) }, many(`${channel} messages`));
     if (!messages) return a.send([]);
     if (!messages.length) return a.send([`${channel} had no messages ${range.label}.`]);
-    const people = await a.get<Person[]>('directory.people', {}, 'names');
+    const people = await a.get<Person[]>('directory.people', {}, many('names'));
 
     const counts = new Map<string, number>();
     for (const m of messages) counts.set(m.authorId, (counts.get(m.authorId) ?? 0) + 1);

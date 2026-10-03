@@ -331,6 +331,21 @@ export function generateCompany(seed: number, now: Date): Company {
     reviewerIds: ['p-daniel'], opened: nowMs - 4 * DAY_MS,
   });
 
+  // a few PRs merged so far this week (on Platform and Product projects), spread evenly between Monday 00:00 and now
+  const elapsed = nowMs - monday;
+  if (elapsed > 0) {
+    for (const [k, projectId] of (['atlas', 'beacon', 'delta'] as const).entries()) {
+      const def = defs.get(projectId)!;
+      const author = pick(rng, developers(def.team));
+      const merged = monday + Math.floor((elapsed * (k + 1)) / 4);
+      const opened = merged - int(rng, 20, 40) * HOUR;
+      prs.push({
+        id: prId++, repo: def.repo, projectId, title: `${pick(rng, VERBS)} ${pick(rng, NOUNS[projectId])}`, authorId: author.id,
+        reviewerIds: reviewers(author, def.team), opened, firstReviewAt: opened + Math.floor((merged - opened) / 2), merged,
+      });
+    }
+  }
+
   // yesterday's Platform standup, whatever day that was
   const yesterday = dayAt(now, -1, 9.5);
   const standup: Meeting = {

@@ -113,6 +113,17 @@ describe('planted scenarios', () => {
     scenarios(generateCompany(HERMES_SEED, sunday), sunday);
   });
 
+  it('has at least three PRs merged so far this week, one on a Platform project, whatever the time', () => {
+    for (const now of [NOW, MONDAY_EARLY, new Date('2026-10-06T09:20:00'), new Date('2026-10-11T12:00:00')]) {
+      const co = generateCompany(HERMES_SEED, now);
+      const monday = weekStart(now).getTime();
+      const merged = co.prs.filter((p) => p.merged !== undefined && p.merged >= monday && p.merged <= now.getTime());
+      expect(merged.length, now.toISOString()).toBeGreaterThanOrEqual(3);
+      expect(merged.some((p) => p.projectId === 'atlas' || p.projectId === 'delta')).toBe(true);
+      for (const p of merged) expect(p.opened <= p.firstReviewAt! && p.firstReviewAt! <= p.merged!).toBe(true);
+    }
+  });
+
   it('shows Sara under and Leo over this week', () => {
     const sara = person(c, 'p-sara');
     const leo = person(c, 'p-leo');

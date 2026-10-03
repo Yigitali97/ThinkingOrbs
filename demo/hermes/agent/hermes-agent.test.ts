@@ -54,6 +54,18 @@ describe('project names', () => {
     expect(unknownProjectName('How is the team doing?')).toBeNull();
   });
 
+  it('never reads a person or team name as an unknown project', () => {
+    for (const q of ['How is Sara doing?', 'How is Sara Lindqvist doing?', 'How is Platform doing?', "What's blocking Leo?", 'Tell me about Product']) {
+      expect(unknownProjectName(q), q).toBeNull();
+    }
+  });
+
+  it.each(['How is Sara doing?', 'How is Platform doing?'])('does not refuse "%s" as a missing project', async (q) => {
+    const r = await ask(q, MAYA);
+    expect(r.text).not.toContain("I can't find a project called");
+    expect(r.text).not.toContain("isn't one of the projects you can see");
+  });
+
   it('lists the intents in the documented order', () => {
     expect(HERMES_INTENTS.map((i) => i.id)).toEqual([
       'this-project', 'my-tickets', 'my-hours', 'dev-hours', 'team-health', 'project-blockers', 'project-status',
@@ -259,6 +271,13 @@ describe('team health and the status draft', () => {
     const draft = ofKind(r.blocks, 'draft')[0];
     expect(draft.channel).toBe('teams');
     expect(draft.body).toContain(`PRs merged: ${merged}`);
+    expect(Number(merged)).toBeGreaterThan(0);
+  });
+
+  it('drafts a status update when a project is named, instead of answering with its status', async () => {
+    const r = await ask('Write a status update for Atlas', DANIEL);
+    expect(ofKind(r.blocks, 'draft')).toHaveLength(1);
+    expect(ofKind(r.blocks, 'status')).toHaveLength(0);
   });
 
   it('shows team health stats and who is over or under capacity', async () => {
@@ -278,8 +297,25 @@ describe('team health and the status draft', () => {
   it('says when Jira did not respond', async () => {
     setDown('Jira', true);
     const r = await ask('How is the team doing?', MAYA);
-    expect(r.text).toContain("Jira didn't respond");
+    expect(r.text).toContain("Jira didn't respond, so closed tickets and blockers aren't included.");
     expect(r.text).not.toMatch(/Sources: .*Jira/);
+  });
+
+  it('words every missing-data line with a verb that agrees', async () => {
+    setDown('Jira', true);
+    const tickets = await ask('What are my open tickets?', SARA);
+    expect(tickets.text).toContain("Jira didn't respond, so your tickets aren't included.");
+    const status = await ask('How are the projects going?', MAYA);
+    expect(status.text).toContain("Jira didn't respond, so tickets and sprints aren't included.");
+    setDown('Jira', false);
+    setDown('GitHub', true);
+    try {
+      const health = await ask('How is the team doing?', MAYA);
+      expect(health.text).toContain("GitHub didn't respond, so pull requests aren't included.");
+      expect(health.text).not.toMatch(/\b(requests|tickets|blockers|notes|names|hours) isn't included/);
+    } finally {
+      setDown('GitHub', false);
+    }
   });
 });
 

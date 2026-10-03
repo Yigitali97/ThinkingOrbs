@@ -12,12 +12,24 @@ import { COMPANY } from '../../store';
 
 /** The project names Hermes recognizes in a question. Names only: what a user may read about a project still comes through the policy. */
 export const PROJECT_NAMES: { id: string; name: string; team: string }[] = COMPANY.projects.map((p) => ({ id: p.id, name: p.name, team: p.team }));
+/** Words that ask for a written draft (the status-draft intent), which other intents leave alone. */
+export const DRAFT_WORDS = ['write', 'draft', 'compose', 'prepare'];
 export const CHANNELS = ['#backend', '#product', '#general'];
 const TEAM_CHANNEL: Record<string, string> = { Platform: '#backend', Product: '#product' };
 export const teamChannel = (team: string): string => TEAM_CHANNEL[team] ?? '#general';
 
 const SYSTEMS: Record<string, string> = { directory: 'Directory', clockify: 'Clockify', jira: 'Jira', github: 'GitHub', teams: 'Teams', aws: 'AWS' };
 const systemOf = (toolId: string): string => SYSTEMS[toolId.split('.')[0]] ?? toolId;
+
+/** What a failed call leaves out of the answer, with the verb that agrees with it. */
+export interface Missing {
+  text: string;
+  plural: boolean;
+}
+/** Missing data named in the plural: "blockers aren't included". */
+export const many = (text: string): Missing => ({ text, plural: true });
+/** Missing data named in the singular: "the project list isn't included". */
+export const one = (text: string): Missing => ({ text, plural: false });
 
 /** A policy refusal that ends the answer with its reason. */
 export class Denied extends Error {
@@ -34,7 +46,7 @@ export class Answer {
   private systems: string[] = [];
   private notes: string[] = [];
   /** per system, what is missing because it didn't respond */
-  private failures = new Map<string, { reason: 'failed' | 'unknown-tool'; what: string[] }>();
+  private failures = new Map<string, { reason: 'failed' | 'unknown-tool'; what: Missing[] }>();
 
   constructor(
     readonly ctx: BrainContext,
@@ -43,7 +55,7 @@ export class Answer {
   ) {}
 
   /** Calls a tool and records the outcome. `what` names the data for the "didn't respond" line. */
-  async result<O>(toolId: string, input: unknown, what: string): Promise<ToolResult<O>> {
+  async result<O>(toolId: string, input: unknown, what: Missing): Promise<ToolResult<O>> {
     const r = await this.ctx.call<O>(toolId, input);
     const system = systemOf(toolId);
     if (r.ok) {
@@ -51,14 +63,14 @@ export class Answer {
       if (r.restricted && !this.notes.includes(r.restricted)) this.notes.push(r.restricted);
     } else if (r.reason !== 'denied') {
       const failure = this.failures.get(system) ?? { reason: r.reason, what: [] };
-      if (!failure.what.includes(what)) failure.what.push(what);
+      if (!failure.what.some((w) => w.text === what.text)) failure.what.push(what);
       this.failures.set(system, failure);
     }
     return r;
   }
 
   /** The tool's data, or null when the system failed. A denial throws, which ends the answer with its reason. */
-  async get<O>(toolId: string, input: unknown, what: string): Promise<O | null> {
+  async get<O>(toolId: string, input: unknown, what: Missing): Promise<O | null> {
     const r = await this.result<O>(toolId, input, what);
     if (r.ok) return r.data;
     if (r.reason === 'denied') throw new Denied(r.message, r.alternative);
@@ -69,7 +81,8 @@ export class Answer {
   async send(lines: (string | false | null | undefined)[], blocks: Block[] = []): Promise<void> {
     const missing = [...this.failures].map(([system, f]) => {
       const status = f.reason === 'failed' ? "didn't respond" : "isn't connected";
-      return `${system} ${status}, so ${listOf(f.what)} ${f.what.length === 1 ? "isn't" : "aren't"} included.`;
+      const plural = f.what.length > 1 || f.what[0].plural;
+      return `${system} ${status}, so ${listOf(f.what.map((w) => w.text))} ${plural ? "aren't" : "isn't"} included.`;
     });
     const body = [...this.notes, ...lines.filter((l): l is string => Boolean(l)), ...missing].join('\n\n');
     await say(this.emit, body, this.signal);
@@ -103,10 +116,14 @@ export function projectIn<T extends { name: string }>(text: string, all: T[]): T
 }
 
 const NOT_PROJECTS = new Set(['I', 'It', 'This', 'That', 'The', 'There', 'AWS', 'Jira', 'GitHub', 'Teams', 'Clockify', 'Hermes', 'Directory']);
+/** People's first and full names, and team names: a question about them isn't about an unknown project. */
+const PEOPLE_AND_TEAMS = [
+  ...new Set([...COMPANY.people.flatMap((p) => [p.name, p.name.split(' ')[0]]), ...COMPANY.people.map((p) => p.team)]),
+];
 
-/** The capitalized word after "blocking", "about" or "is", when the text names no known project. */
+/** The capitalized word after "blocking", "about" or "is", when the text names no known project, person or team. */
 export function unknownProjectName(text: string): string | null {
-  if (projectIn(text, PROJECT_NAMES)) return null;
+  if (projectIn(text, PROJECT_NAMES) || hasAny(text, PEOPLE_AND_TEAMS)) return null;
   for (const m of text.replace(/[‘’]/g, "'").matchAll(/\b(?:blocking|about|is)\s+([A-Z][A-Za-z0-9-]*)/g)) {
     if (!NOT_PROJECTS.has(m[1])) return m[1];
   }
@@ -116,16 +133,22 @@ export function unknownProjectName(text: string): string | null {
 export type ProjectRef = { id: string; name: string };
 
 /**
- * Checks a named project against the projects the policy lets this user see, before anything project-specific is asked for.
- * Returns the project, a refusal to say, or null when the directory didn't respond.
+ * The projects an answer covers: the named one if the policy lets this user see it, otherwise every visible project.
+ * The check happens before anything project-specific is asked for. When the project is out of reach, or the
+ * directory didn't respond, this sends the answer itself and returns null.
  */
-export async function visibleProject(a: Answer, target: ProjectRef): Promise<{ project: Project } | { refusal: string } | null> {
-  const visible = await a.get<Project[]>('directory.projects', {}, 'the project list');
-  if (!visible) return null;
+export async function resolveProjects(a: Answer, target?: ProjectRef): Promise<Project[] | null> {
+  const visible = await a.get<Project[]>('directory.projects', {}, one('the project list'));
+  if (!visible) {
+    await a.send([]);
+    return null;
+  }
+  if (!target) return visible;
   const project = visible.find((p) => p.id === target.id);
-  if (project) return { project };
+  if (project) return [project];
   const yours = visible.length ? `Your projects: ${visible.map((p) => p.name).join(', ')}.` : "You don't have access to any projects.";
-  return { refusal: `${target.name} isn't one of the projects you can see. ${yours}` };
+  await a.send([`${target.name} isn't one of the projects you can see. ${yours}`]);
+  return null;
 }
 
 // ------------------------------------------------------------------ people and time

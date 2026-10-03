@@ -8,7 +8,8 @@ import { DAY_MS, projectStatus, waitingPrs } from '../../data/derive';
 import type { Issue, Message, Person, Project, PullRequest, Sprint } from '../../data/types';
 import type { Answer, ProjectRef } from './shared';
 import {
-  PROJECT_NAMES, intent, lastDays, listOf, lowerFirst, nameOf, plural, projectIn, teamChannel, unknownProjectName, visibleProject,
+  DRAFT_WORDS, PROJECT_NAMES, intent, lastDays, listOf, lowerFirst, many, nameOf, plural, projectIn, resolveProjects, teamChannel,
+  unknownProjectName,
 } from './shared';
 
 const BLOCKER_WORDS = ['blocking', 'blocked', 'blockers', 'blocker', 'blocks', 'stuck', 'holding up'];
@@ -28,21 +29,12 @@ const cantFind = (name: string) => `I can't find a project called ${name}.`;
 
 /** Status for one or all visible projects, as `status` blocks linking to each project page. */
 async function answerStatus(a: Answer, target?: ProjectRef): Promise<void> {
-  let projects: Project[];
-  if (target) {
-    const seen = await visibleProject(a, target);
-    if (!seen) return a.send([]);
-    if ('refusal' in seen) return a.send([seen.refusal]);
-    projects = [seen.project];
-  } else {
-    const visible = await a.get<Project[]>('directory.projects', {}, 'the project list');
-    if (!visible) return a.send([]);
-    projects = visible;
-  }
+  const projects = await resolveProjects(a, target);
+  if (!projects) return;
   const only = target ? { projectId: target.id } : {};
-  const issues = await a.get<Issue[]>('jira.issues', only, 'ticket data');
-  const sprints = await a.get<Sprint[]>('jira.sprints', only, 'sprint data');
-  const prs = await a.get<PullRequest[]>('github.pullRequests', only, 'pull requests');
+  const issues = await a.get<Issue[]>('jira.issues', only, many('tickets'));
+  const sprints = await a.get<Sprint[]>('jira.sprints', only, many('sprints'));
+  const prs = await a.get<PullRequest[]>('github.pullRequests', only, many('pull requests'));
   if (!issues || !sprints || !prs) return a.send(["I need Jira and GitHub to work out project status, so I can't show it right now."]);
 
   const results = projects.map((p) => ({ project: p, ...projectStatus(p, { issues, prs, sprints }, a.ctx.now) }));
@@ -69,26 +61,17 @@ async function answerStatus(a: Answer, target?: ProjectRef): Promise<void> {
 
 /** Blocked tickets, PRs waiting for review and related messages in the team's channel, for one or all visible projects. */
 async function answerBlockers(a: Answer, target?: ProjectRef): Promise<void> {
-  let projects: Project[];
-  if (target) {
-    const seen = await visibleProject(a, target);
-    if (!seen) return a.send([]);
-    if ('refusal' in seen) return a.send([seen.refusal]);
-    projects = [seen.project];
-  } else {
-    const visible = await a.get<Project[]>('directory.projects', {}, 'the project list');
-    if (!visible) return a.send([]);
-    projects = visible;
-  }
+  const projects = await resolveProjects(a, target);
+  if (!projects) return;
   const { now } = a.ctx;
   const only = target ? { projectId: target.id } : {};
-  const people = await a.get<Person[]>('directory.people', {}, 'names');
-  const issues = await a.get<Issue[]>('jira.issues', { ...only, open: true, blocked: true }, 'blocked tickets');
-  const prs = await a.get<PullRequest[]>('github.pullRequests', { ...only, open: true }, 'pull requests');
+  const people = await a.get<Person[]>('directory.people', {}, many('names'));
+  const issues = await a.get<Issue[]>('jira.issues', { ...only, open: true, blocked: true }, many('blocked tickets'));
+  const prs = await a.get<PullRequest[]>('github.pullRequests', { ...only, open: true }, many('pull requests'));
   const channels = [...new Set(projects.map((p) => teamChannel(p.team)))];
   const messages: Message[] = [];
   for (const channel of channels) {
-    messages.push(...((await a.get<Message[]>('teams.messages', { channel, ...lastDays(now, 7) }, `${channel} messages`)) ?? []));
+    messages.push(...((await a.get<Message[]>('teams.messages', { channel, ...lastDays(now, 7) }, many(`${channel} messages`))) ?? []));
   }
 
   const ids = new Set(projects.map((p) => p.id));
@@ -180,6 +163,8 @@ export const projectBlockers = intent<Target>(
 export const projectStatusIntent = intent<Target>(
   'project-status',
   (text) => {
+    // "write a status update for Atlas" asks for a draft, not a status
+    if (hasAny(text, DRAFT_WORDS)) return null;
     if (hasAny(text, ALL_PROJECTS)) return {};
     const named = projectIn(text, PROJECT_NAMES);
     if (named && hasAny(text, ONE_PROJECT)) return { target: { id: named.id, name: named.name } };

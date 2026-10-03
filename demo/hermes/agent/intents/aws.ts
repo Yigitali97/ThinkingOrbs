@@ -5,7 +5,7 @@ import type { Block } from '../../../assistant/protocol';
 import { hasAny } from '../../../assistant/text';
 import type { AwsCost, AwsHealth } from '../../data/types';
 import type { Answer } from './shared';
-import { capitalize, dayLabel, intent, money, monthLabel, monthName } from './shared';
+import { capitalize, dayLabel, intent, many, money, monthLabel, monthName, one } from './shared';
 
 function healthTable(health: AwsHealth[]): Block {
   return {
@@ -22,7 +22,7 @@ function healthTable(health: AwsHealth[]): Block {
 }
 
 async function healthInstead(a: Answer, reason: string, alternative?: string): Promise<void> {
-  const health = await a.get<AwsHealth[]>('aws.health', {}, 'service health');
+  const health = await a.get<AwsHealth[]>('aws.health', {}, one('service health'));
   const lines = [[reason, alternative].filter(Boolean).join(' ')];
   if (!health) return a.send(lines);
   const degraded = health.filter((h) => h.status !== 'healthy').map((h) => h.service);
@@ -34,7 +34,7 @@ export const awsCosts = intent<true>(
   'aws-costs',
   (text) => (hasAny(text, ['aws', 'cloud']) && hasAny(text, ['cost', 'costs', 'spend', 'spending', 'bill', 'billing', 'expensive']) ? true : null),
   async (_p, a) => {
-    const r = await a.result<AwsCost[]>('aws.costs', { months: 6 }, 'AWS costs');
+    const r = await a.result<AwsCost[]>('aws.costs', { months: 6 }, many('AWS costs'));
     if (!r.ok) return r.reason === 'denied' ? healthInstead(a, r.message, r.alternative) : a.send([]);
     const costs = r.data;
     const months = [...new Set(costs.map((c) => c.month))].sort();
@@ -62,7 +62,7 @@ export const awsCosts = intent<true>(
           (driverChange !== null ? ` (${driverChange}%).` : '.'),
       );
     }
-    const health = await a.get<AwsHealth[]>('aws.health', {}, 'the cause from service health');
+    const health = await a.get<AwsHealth[]>('aws.health', {}, one('the cause from service health'));
     const note = health?.find((h) => h.service === driver.service)?.note;
     if (note) lines.push(`AWS health notes for ${driver.service}: ${note}.`);
 

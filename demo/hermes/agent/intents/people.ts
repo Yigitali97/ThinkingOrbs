@@ -8,8 +8,8 @@ import { capacityBetween, loadState, projectStatus } from '../../data/derive';
 import type { Issue, Meeting, Person, Project, PullRequest, Sprint } from '../../data/types';
 import type { TimeReport } from '../tools';
 import {
-  Answer, Denied, PROJECT_NAMES, capitalize, comparisonRange, dayLabel, hours, intent, isDeveloper, lastDays, listOf, lowerFirst,
-  percentOf, plural, rangeIn, round1, span, teamChannel,
+  Answer, DRAFT_WORDS, Denied, PROJECT_NAMES, capitalize, comparisonRange, dayLabel, hours, intent, isDeveloper, lastDays, listOf,
+  lowerFirst, many, one, percentOf, plural, rangeIn, round1, span, teamChannel,
 } from './shared';
 
 const SIGN_IN = 'Sign in to use Hermes.';
@@ -17,7 +17,6 @@ const HOURS_WORDS = ['hours', 'hour', 'worked', 'timesheet', 'timesheets'];
 const GROUP_WORDS = ['developers', 'developer', 'devs', 'engineers', 'team', 'everyone', 'everybody', 'people'];
 const SELF_WORDS = ['i', 'my', 'me', 'mine'];
 const TEAM_HEALTH_PHRASES = ['how is the team', "how's the team", 'team doing', 'team health', 'team going', 'how are we doing', 'how is everyone'];
-const DRAFT_WORDS = ['write', 'draft', 'compose', 'prepare'];
 const DRAFT_KINDS = ['update', 'status', 'message', 'post', 'summary', 'report'];
 const STATUS_LABEL: Record<Issue['status'], string> = { todo: 'To do', 'in-progress': 'In progress', 'in-review': 'In review', done: 'Done' };
 const STATUS_ORDER: Issue['status'][] = ['in-progress', 'in-review', 'todo', 'done'];
@@ -55,7 +54,7 @@ export const myTickets = intent<true>(
   (text) => (hasAny(text, ['ticket', 'tickets', 'issue', 'issues', 'jira']) && hasAny(text, SELF_WORDS) ? true : null),
   async (_p, a) => {
     const user = requireUser(a);
-    const issues = await a.get<Issue[]>('jira.issues', { assigneeId: user.id, open: true }, 'your tickets');
+    const issues = await a.get<Issue[]>('jira.issues', { assigneeId: user.id, open: true }, many('your tickets'));
     if (!issues) return a.send([]);
     if (!issues.length) return a.send(['You have no open tickets.']);
     const sorted = [...issues].sort((x, y) => STATUS_ORDER.indexOf(x.status) - STATUS_ORDER.indexOf(y.status) || x.key.localeCompare(y.key));
@@ -92,9 +91,9 @@ export const myHours = intent<{ text: string }>(
     const user = requireUser(a);
     const { now } = a.ctx;
     const range = rangeIn(text, now);
-    const report = await a.get<TimeReport>('clockify.timeEntries', { ...span(range, now), personId: user.id }, 'your hours');
+    const report = await a.get<TimeReport>('clockify.timeEntries', { ...span(range, now), personId: user.id }, many('your hours'));
     if (!report) return a.send([]);
-    const people = await a.get<Person[]>('directory.people', {}, 'your capacity');
+    const people = await a.get<Person[]>('directory.people', {}, one('your capacity'));
     const mine = report.entries.filter((e) => e.personId === user.id);
     const total = sum(mine.map((e) => e.hours));
     const me = people?.find((p) => p.id === user.id);
@@ -134,10 +133,10 @@ export const devHours = intent<{ text: string }>(
     const { now } = a.ctx;
     const range = rangeIn(text, now);
     const before = comparisonRange(range);
-    const people = user.role === 'developer' ? null : await a.get<Person[]>('directory.people', {}, 'names and capacity');
-    const current = await a.get<TimeReport>('clockify.timeEntries', span(range, now), 'hours');
+    const people = user.role === 'developer' ? null : await a.get<Person[]>('directory.people', {}, many('names and capacity'));
+    const current = await a.get<TimeReport>('clockify.timeEntries', span(range, now), many('hours'));
     if (!current) return a.send([]);
-    const previous = await a.get<TimeReport>('clockify.timeEntries', span(before, now), `the comparison with ${before.label}`);
+    const previous = await a.get<TimeReport>('clockify.timeEntries', span(before, now), one(`the comparison with ${before.label}`));
 
     let columns: Column[];
     let rows: Row[];
@@ -246,11 +245,11 @@ export async function gatherHealth(a: Answer, text: string): Promise<Health> {
   const teams = user.role === 'leadership' ? [...new Set(PROJECT_NAMES.map((p) => p.team))] : [user.team];
   const inScope = new Set(PROJECT_NAMES.filter((p) => teams.includes(p.team)).map((p) => p.id));
 
-  const people = await a.get<Person[]>('directory.people', {}, 'names and capacity');
-  const time = await a.get<TimeReport>('clockify.timeEntries', window, 'hours');
-  const issues = await a.get<Issue[]>('jira.issues', {}, 'ticket data');
-  const prs = await a.get<PullRequest[]>('github.pullRequests', {}, 'pull requests');
-  const meetings = await a.get<Meeting[]>('teams.meetings', { kind: 'standup', ...lastDays(now, 7) }, 'standup notes');
+  const people = await a.get<Person[]>('directory.people', {}, many('names and capacity'));
+  const time = await a.get<TimeReport>('clockify.timeEntries', window, many('hours'));
+  const issues = await a.get<Issue[]>('jira.issues', {}, many('closed tickets and blockers'));
+  const prs = await a.get<PullRequest[]>('github.pullRequests', {}, many('pull requests'));
+  const meetings = await a.get<Meeting[]>('teams.meetings', { kind: 'standup', ...lastDays(now, 7) }, many('standup notes'));
 
   const members = people?.filter((p) => teams.includes(p.team)) ?? null;
   let loads: Load[] | null = null;
@@ -365,8 +364,8 @@ export const statusDraft = intent<{ text: string }>(
   (text) => (hasAny(text, DRAFT_WORDS) && hasAny(text, DRAFT_KINDS) ? { text } : null),
   async ({ text }, a) => {
     const h = await gatherHealth(a, text);
-    const projects = await a.get<Project[]>('directory.projects', {}, 'the project list');
-    const sprints = await a.get<Sprint[]>('jira.sprints', {}, 'sprint data');
+    const projects = await a.get<Project[]>('directory.projects', {}, one('the project list'));
+    const sprints = await a.get<Sprint[]>('jira.sprints', {}, many('sprints'));
     const pct = capacityPct(h);
     const period = h.range.label === 'this week' ? `week of ${dayLabel(h.range.from.getTime())}` : h.range.label;
     const missing = 'not available';
