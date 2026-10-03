@@ -18,9 +18,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     permissions: ['clipboard-read', 'clipboard-write'],
-    launchOptions: {
-      args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-    },
+    // Linux headless Chromium already renders WebGL in software; forcing SwiftShader there makes every screenshot stall
+    launchOptions: process.platform === 'linux' ? {} : { args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] },
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
