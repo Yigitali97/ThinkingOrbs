@@ -1,4 +1,4 @@
-// The Connections page: the company systems Hermes reads, when each last synced, what this user's role lets Hermes read
+// The Connections view: the company systems Hermes reads, when each last synced, what this user's role lets Hermes read
 // there, and a switch per system to simulate an outage so the assistant's "didn't respond" answers can be tried.
 
 import { useAssistant } from '../../assistant/AssistantProvider';
@@ -62,15 +62,15 @@ export function Connections() {
   const now = hermesNow().getTime();
 
   return (
-    <div className="page as">
-      <h1>Connections</h1>
+    <div className="view as">
+      <h2 className="view-title">Connections</h2>
       <p className="lede">
         Hermes reads these systems as you, and only what your role allows. It never writes to them. To see how answers cope when a system is
         unavailable, simulate an outage.
       </p>
 
-      <section className="page-section">
-        <h2>Company systems</h2>
+      <section className="view-section">
+        <h3>Company systems</h3>
         <ul className="systems">
           {SYSTEMS.map((s, i) => {
             const isDown = down.has(s.name);
@@ -79,7 +79,7 @@ export function Connections() {
             return (
               <li key={s.name} className="system" data-down={isDown || undefined}>
                 <div className="system-head">
-                  <h3>{s.name}</h3>
+                  <h4>{s.name}</h4>
                   <span className="system-state">
                     <span className="dot" aria-hidden="true" />
                     {isDown ? 'Outage (simulated)' : 'Connected'}
@@ -101,13 +101,13 @@ export function Connections() {
         </ul>
       </section>
 
-      <section className="page-section">
-        <h2>Not connected yet</h2>
+      <section className="view-section">
+        <h3>Not connected yet</h3>
         <ul className="systems">
           {LATER.map((name) => (
             <li key={name} className="system system-later">
               <div className="system-head">
-                <h3>{name}</h3>
+                <h4>{name}</h4>
                 <span className="tag">Coming later</span>
               </div>
             </li>

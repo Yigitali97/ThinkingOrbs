@@ -1,4 +1,4 @@
-// One project's page: its status, the last sprint (Ruling R4), blocked tickets, open pull requests, recent team decisions
+// One project's view: its status, the last sprint (Ruling R4), blocked tickets, open pull requests, recent team decisions
 // and hours logged. The budget appears only when the policy left `budgetHours` in the project, which it removes for Developers.
 
 import { Chart, StatusBadge, Table } from '../../assistant/blocks/Blocks';
@@ -97,7 +97,7 @@ function Sections({ data }: { data: ProjectData }) {
     <>
       <div className="summary-grid">
         <section className="info-card">
-          <h2>Sprint</h2>
+          <h3>Sprint</h3>
           <p className="figure">
             {lastSprint ? `Last sprint: ${lastSprint.completedPoints} / ${lastSprint.committedPoints} points` : 'No finished sprint yet'}
           </p>
@@ -109,13 +109,13 @@ function Sections({ data }: { data: ProjectData }) {
           <p className="muted">{data.openPoints === 1 ? '1 point still open' : `${data.openPoints} points still open`}</p>
         </section>
         <section className="info-card">
-          <h2>Hours logged</h2>
+          <h3>Hours logged</h3>
           <p className="figure">{data.hours === null ? 'Clockify didn’t respond' : hoursText(data.hours)}</p>
           <p className="muted">Since the project started on {dateText(project.start)}</p>
         </section>
         {budget !== undefined && (
           <section className="info-card">
-            <h2>Budget</h2>
+            <h3>Budget</h3>
             <p className="figure">{hoursText(budget)}</p>
             {used !== null && (
               <>
@@ -130,16 +130,16 @@ function Sections({ data }: { data: ProjectData }) {
       </div>
 
       {data.weekly && (
-        <section className="page-section">
-          <h2>Hours per week</h2>
+        <section className="view-section">
+          <h3>Hours per week</h3>
           <Chart {...data.weekly} caption={`Hours logged on ${project.name} per week, last ${WEEKS} weeks`} />
         </section>
       )}
 
-      <section className="page-section">
-        <h2>Blocked tickets</h2>
+      <section className="view-section">
+        <h3>Blocked tickets</h3>
         {data.blocked.length ? (
-          <div className="page-table caption-hidden">
+          <div className="view-table caption-hidden">
             <Table
               columns={[
                 { key: 'key', label: 'Ticket' },
@@ -156,10 +156,10 @@ function Sections({ data }: { data: ProjectData }) {
         )}
       </section>
 
-      <section className="page-section">
-        <h2>Open pull requests</h2>
+      <section className="view-section">
+        <h3>Open pull requests</h3>
         {data.prs.length ? (
-          <div className="page-table caption-hidden">
+          <div className="view-table caption-hidden">
             <Table
               columns={[
                 { key: 'pr', label: 'Pull request' },
@@ -177,8 +177,8 @@ function Sections({ data }: { data: ProjectData }) {
         )}
       </section>
 
-      <section className="page-section">
-        <h2>Recent decisions</h2>
+      <section className="view-section">
+        <h3>Recent decisions</h3>
         {data.meetings.length ? (
           <ul className="decisions">
             {data.meetings.map((m) => (
@@ -202,15 +202,15 @@ function Sections({ data }: { data: ProjectData }) {
   );
 }
 
-/** Rendered only for a project the user may see; App shows the not-found page for any other. */
+/** Rendered only for a project the user may see; the canvas shows the not-found view for any other. */
 export function Project({ id }: { id: string }) {
   const name = HERMES_PROJECTS.find((p) => p.id === id)?.name ?? id;
   usePageContext({ page: 'project', id, title: name });
   const [data, broken] = usePageData((user, now) => loadProject(id, user, now), id);
 
   return (
-    <div className="page as">
-      <h1>{name}</h1>
+    <div className="view as">
+      <h2 className="view-title">{name}</h2>
       <div className="project-status" aria-busy={data === undefined && !broken}>
         {data === undefined ? (
           <Loading failed={broken} />

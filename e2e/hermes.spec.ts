@@ -1,4 +1,5 @@
-// The Hermes site: demo sign-in and its guard, every page's title, the not-found page, and what each page shows per role.
+// The Hermes workspace: demo sign-in and its guard, the rail, the conversation and the canvas that shows a dashboard beside it
+// (a modal sheet below 1024px), every route's title, one h1 and accessibility, and what each view shows per role.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,36 +8,109 @@ import type { Page } from '@playwright/test';
 import { HERMES_PATHS, hermesPageMeta } from '../demo/hermes/routes';
 import { expect, signInAs, test } from './fixtures';
 
+const DEVELOPER_COPY = "Individual hours for other people are visible to managers. Here's your team's total instead.";
+const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
+
+const narrow = (page: Page) => page.viewportSize()!.width < 1024;
+const composer = (page: Page) => page.getByRole('textbox', { name: 'Ask Hermes' });
+const conversation = (page: Page) => page.getByRole('region', { name: 'Conversation', exact: true });
+const canvas = (page: Page) => page.locator('[data-canvas]');
+const rail = (page: Page) => page.locator('[data-rail]');
+const drawer = (page: Page) => page.getByRole('dialog', { name: 'Menu' });
+const dashboards = (page: Page) => page.getByRole('navigation', { name: 'Dashboards' });
+const turns = (page: Page) => conversation(page).locator('[data-turn]');
+
+async function ask(page: Page, question: string) {
+  await composer(page).fill(question);
+  await composer(page).press('Enter');
+}
+
+/** On a desktop the rail is always there; below 1024px it is a drawer behind the Menu button. */
+async function openRail(page: Page) {
+  if (!narrow(page)) return;
+  if (await drawer(page).count()) return;
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await expect(drawer(page)).toBeVisible();
+}
+
+async function closeRail(page: Page) {
+  if (!narrow(page) || !(await drawer(page).count())) return;
+  await page.keyboard.press('Escape');
+  await expect(drawer(page)).toHaveCount(0);
+}
+
+/** Opens a dashboard from the rail. */
+async function openDashboard(page: Page, name: string) {
+  await openRail(page);
+  await dashboards(page).getByRole('link', { name, exact: true }).click();
+  await expect(canvas(page)).toBeVisible();
+}
+
+async function closeCanvas(page: Page) {
+  await canvas(page).getByRole('button', { name: 'Close' }).click();
+  await expect(canvas(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/hermes$/);
+}
+
+/** Switches demo user through the rail's user menu. Below 1024px the canvas sheet is modal, so the caller closes it first. */
+async function switchTo(page: Page, from: string, to: string) {
+  await openRail(page);
+  await rail(page).getByRole('button', { name: new RegExp(from) }).click();
+  await page.getByRole('menuitem', { name: new RegExp(`Switch demo user.*${to}`) }).click();
+  await expect(rail(page).getByRole('button', { name: new RegExp(to) })).toBeVisible();
+  await closeRail(page);
+}
+
+/** Waits for the canvas to finish sliding in, and any screen to finish fading in. */
+async function settled(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('[data-canvas], .route')].every((el) => el.getAnimations().every((a) => a.playState !== 'running')),
+      ),
+    )
+    .toBe(true);
+}
+
+// ------------------------------------------------------------------ sign-in
+
 test('signed out, a page sends you to sign-in and back after you pick a user', async ({ page }) => {
   await page.goto('/hermes/team');
   await expect(page).toHaveURL(/\/hermes\/sign-in\?next=%2Fhermes%2Fteam$/);
   await expect(page.locator('h1')).toHaveText('Sign in to Hermes');
   await expect(page.getByText('This is a demo. Pick a sample employee to sign in as — no password needed.')).toBeVisible();
+  await expect(page.locator('[data-bot]')).toBeVisible();
 
   await page.getByRole('button', { name: /Daniel Okafor/ }).click();
   await expect(page).toHaveURL(/\/hermes\/team$/);
-  await expect(page.getByRole('button', { name: /Daniel Okafor/ })).toBeVisible();
-  await expect(page.getByText('Demo user', { exact: true })).toBeVisible();
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Team' })).toBeAttached();
+  if (narrow(page)) await closeCanvas(page);
+  await openRail(page);
+  await expect(rail(page).getByRole('button', { name: /Daniel Okafor/ })).toBeVisible();
+  await expect(rail(page).getByText('Demo user', { exact: true })).toBeVisible();
 });
 
 test('the user menu switches user and signs out', async ({ page }) => {
   await signInAs(page, 'p-maya');
-  await page.goto('/hermes/team');
-  const menu = page.getByRole('button', { name: /Maya Chen/ });
+  await page.goto('/hermes');
+  await openRail(page);
+  const menu = rail(page).getByRole('button', { name: /Maya Chen/ });
   // aria-controls points at the menu only while it exists
   await expect(menu).not.toHaveAttribute('aria-controls');
   await menu.click();
   const controls = await menu.getAttribute('aria-controls');
   await expect(page.locator(`[id="${controls}"]`)).toHaveRole('menu');
   await page.getByRole('menuitem', { name: /Switch demo user.*Daniel Okafor/ }).click();
-  await expect(page.getByRole('button', { name: /Daniel Okafor/ })).toBeVisible();
+  const daniel = rail(page).getByRole('button', { name: /Daniel Okafor/ });
+  await expect(daniel).toBeVisible();
+  await expect(page.locator('h1')).toHaveText(/^Good .*Daniel$/);
 
-  await page.getByRole('button', { name: /Daniel Okafor/ }).click();
+  await daniel.click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menuitem', { name: 'Sign out' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Daniel Okafor/ })).toBeFocused();
+  await expect(daniel).toBeFocused();
 
-  await page.getByRole('button', { name: /Daniel Okafor/ }).click();
+  await daniel.click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/hermes\/sign-in$/);
   await expect(page.locator('h1')).toHaveText('Sign in to Hermes');
@@ -45,12 +119,16 @@ test('the user menu switches user and signs out', async ({ page }) => {
 test('a next target outside Hermes is ignored', async ({ page }) => {
   await page.goto('/hermes/sign-in?next=https://evil.test');
   await page.getByRole('button', { name: /Maya Chen/ }).click();
-  // the router drops trailing slashes, so Home is /hermes
+  // the router drops trailing slashes, so the conversation is /hermes
   await expect(page).toHaveURL(/\/hermes\/?$/);
 });
 
+// ------------------------------------------------------------------ every route
+
+// Each route: right title and description, exactly one h1 in the DOM (Ruling R2), no sideways scroll at this project's width
+// and at 375px, and no serious axe violations once the canvas has slid in.
 for (const path of HERMES_PATHS) {
-  test(`page ${path}`, async ({ page }) => {
+  test(`route ${path}`, async ({ page }) => {
     // the sign-in page is the one page a signed-in visitor can still open
     if (path !== '/hermes/sign-in') await signInAs(page, 'p-maya');
     await page.goto(path);
@@ -58,19 +136,299 @@ for (const path of HERMES_PATHS) {
     await expect(page).toHaveTitle(meta.title);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', meta.description);
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page.locator('header h1')).toHaveCount(0);
-    const overflow = (await page.evaluate(() => document.documentElement.scrollWidth)) - page.viewportSize()!.width;
-    expect(overflow, 'page is wider than the viewport').toBeLessThanOrEqual(0);
+
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(await overflow(), 'page is wider than the viewport').toBeLessThanOrEqual(0);
+
+    await settled(page);
+    const axe = await new AxeBuilder({ page }).include('body').exclude('canvas').exclude('svg').analyze();
+    const serious = axe.violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
+    expect(serious, 'accessibility violations').toEqual([]);
+
+    // and again at exactly 375px wide, once the page has re-laid itself out
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.locator('h1')).toHaveCount(1);
+    await settled(page);
+    expect(await overflow(), 'page is wider than 375px').toBeLessThanOrEqual(0);
   });
 }
 
-test('an unknown project shows the not-found page', async ({ page }) => {
+test('mid-conversation the one h1 is a visually hidden Hermes', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await expect(page.locator('h1')).toHaveText(/^Good (morning|afternoon|evening), Maya$/);
+  await expect(page.locator('h1')).toBeVisible();
+  await ask(page, 'How is the team doing?');
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('h1')).toHaveText('Hermes');
+  const box = await page.locator('h1').boundingBox();
+  expect(box!.width * box!.height).toBeLessThanOrEqual(1);
+});
+
+// ------------------------------------------------------------------ layout and routing
+
+test('/hermes shows the rail and the conversation, and no canvas', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await expect(conversation(page)).toBeVisible();
+  await expect(composer(page)).toBeVisible();
+  await expect(canvas(page)).toHaveCount(0);
+  if (narrow(page)) {
+    await expect(dashboards(page)).toHaveCount(0);
+    await openRail(page);
+  }
+  await expect(rail(page).getByRole('button', { name: 'New conversation' })).toBeVisible();
+  await expect(dashboards(page).getByRole('link', { name: 'Team', exact: true })).toBeVisible();
+  // no top header, dock or side panel any more
+  await expect(page.getByRole('button', { name: 'Open Hermes' })).toHaveCount(0);
+  await expect(page.locator('.as-panel, .as-dock, .topbar')).toHaveCount(0);
+});
+
+test('/hermes/team shows the canvas with Team and the conversation beside or under it', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/team');
+  await expect(canvas(page)).toBeVisible();
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Team' })).toBeAttached();
+  await expect(canvas(page).locator('table tbody tr').first()).toBeVisible();
+  await expect(conversation(page)).toBeAttached();
+  if (narrow(page)) {
+    await expect(page.getByRole('dialog', { name: 'Team' })).toHaveAttribute('aria-modal', 'true');
+  } else {
+    await expect(page.getByRole('complementary', { name: 'Team' })).toBeVisible();
+    await expect(composer(page)).toBeVisible();
+    const c = (await canvas(page).boundingBox())!;
+    const talk = (await conversation(page).boundingBox())!;
+    expect(talk.x + talk.width, 'the conversation sits beside the canvas').toBeLessThanOrEqual(c.x + 1);
+    expect(c.width).toBeGreaterThanOrEqual(420);
+  }
+});
+
+test('closing the canvas goes back to /hermes, and back and forward toggle it', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await openDashboard(page, 'Team');
+  await expect(page).toHaveURL(/\/hermes\/team$/);
+  await closeCanvas(page);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/hermes\/team$/);
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Team' })).toBeAttached();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/hermes$/);
+  await expect(canvas(page)).toHaveCount(0);
+});
+
+test('opening and closing the canvas through the rail never stops a reply that is streaming', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'How is the team doing?');
+  await expect(turns(page)).toHaveAttribute('data-turn', /^(working|writing)$/);
+  await openDashboard(page, 'Team');
+  // below 1024px the sheet covers the rail, so close it before picking the next one
+  if (narrow(page)) await closeCanvas(page);
+  await openDashboard(page, 'Projects');
+  await closeCanvas(page);
+  // still the same reply, still running, and it finishes
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turns(page)).toHaveAttribute('data-turn', /^(working|writing|done)$/);
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  await expect(turns(page).getByText('Stopped.')).toHaveCount(0);
+  await expect(turns(page).locator('.as-stat')).toBeVisible();
+});
+
+test('a link in an answer opens its view in the canvas and keeps the conversation', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'How are the projects going?');
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  await turns(page).getByRole('link', { name: 'Open Atlas' }).click();
+  await expect(page).toHaveURL(/\/hermes\/projects\/atlas$/);
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Atlas' })).toBeAttached();
+  await expect(turns(page)).toHaveCount(1);
+});
+
+test('opening a view moves focus to the canvas, and closing it returns focus to the rail link', async ({ page }) => {
+  test.skip(narrow(page), 'desktop rail');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  const team = dashboards(page).getByRole('link', { name: 'Team', exact: true });
+  await team.focus();
+  await page.keyboard.press('Enter');
+  await expect(canvas(page)).toBeFocused();
+  await closeCanvas(page);
+  await expect(team).toBeFocused();
+});
+
+test('/ and Ctrl+K go to the composer, and / typed in the composer stays text', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await page.locator('body').press('/');
+  await expect(composer(page)).toBeFocused();
+  await composer(page).pressSequentially('a/');
+  await expect(composer(page)).toHaveValue('a/');
+  await composer(page).blur();
+  await page.keyboard.press('Control+K');
+  await expect(composer(page)).toBeFocused();
+});
+
+// ------------------------------------------------------------------ the rail
+
+test('rail: dashboard links open their view and mark it as current', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await openRail(page);
+  for (const name of ['Team', 'Projects', 'Connections']) {
+    await expect(dashboards(page).getByRole('link', { name, exact: true })).not.toHaveAttribute('aria-current');
+  }
+  await openDashboard(page, 'Projects');
+  await expect(page).toHaveURL(/\/hermes\/projects$/);
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Projects' })).toBeAttached();
+  // below 1024px picking a link closes the drawer, and the sheet covers the rail
+  if (narrow(page)) {
+    await expect(drawer(page)).toHaveCount(0);
+    return;
+  }
+  await expect(dashboards(page).getByRole('link', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'page');
+  await openDashboard(page, 'Team');
+  await expect(dashboards(page).getByRole('link', { name: 'Team', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(dashboards(page).getByRole('link', { name: 'Projects', exact: true })).not.toHaveAttribute('aria-current');
+  // a project counts as being in Projects
+  await page.goto('/hermes/projects/atlas');
+  await expect(dashboards(page).getByRole('link', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'true');
+});
+
+test('rail: New conversation files the current one away, and picking it brings it back', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  await ask(page, 'How is the team doing?');
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+
+  await openRail(page);
+  const current = rail(page).getByRole('button', { name: /How is the team doing\?.*Current conversation/ });
+  await expect(current).toHaveAttribute('aria-current', 'true');
+  await rail(page).getByRole('button', { name: 'New conversation' }).click();
+  await expect(turns(page)).toHaveCount(0);
+  await expect(composer(page)).toBeFocused();
+  await expect(page.locator('h1')).toHaveText(/^Good .*Maya$/);
+
+  await openRail(page);
+  const past = rail(page).getByRole('button', { name: 'How is the team doing?', exact: true });
+  await expect(past).toBeVisible();
+  await past.click();
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done');
+  await expect(conversation(page).getByText('How is the team doing?', { exact: true })).toBeVisible();
+  await openRail(page);
+  await expect(rail(page).getByRole('button', { name: 'How is the team doing?', exact: true })).toHaveCount(0);
+});
+
+test('rail: at 1024px and up it collapses to an icon strip and expands again', async ({ page }) => {
+  test.skip(narrow(page), 'desktop rail');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes');
+  const wide = (await rail(page).boundingBox())!.width;
+  expect(wide).toBeGreaterThanOrEqual(220);
+  await rail(page).getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect.poll(async () => (await rail(page).boundingBox())!.width).toBeLessThanOrEqual(72);
+  // the links keep their names as icons
+  await expect(dashboards(page).getByRole('link', { name: 'Team', exact: true })).toBeVisible();
+  await rail(page).getByRole('button', { name: 'Expand sidebar' }).click();
+  await expect.poll(async () => (await rail(page).boundingBox())!.width).toBeGreaterThanOrEqual(220);
+});
+
+// ------------------------------------------------------------------ below 1024px
+
+for (const width of [900, 0]) {
+  test(`below 1024px${width ? ` (${width}px)` : ''}: Menu opens the rail as a drawer, and the canvas is a modal sheet`, async ({
+    page,
+    isMobile,
+  }) => {
+    if (width) {
+      test.skip(isMobile, 'the phone runs the 0 case');
+      await page.setViewportSize({ width, height: 800 });
+    } else {
+      test.skip(!isMobile, 'Pixel 7 only');
+    }
+    await signInAs(page, 'p-maya');
+    await page.goto('/hermes');
+    const menu = page.getByRole('button', { name: 'Menu' });
+    await menu.click();
+    await expect(drawer(page)).toHaveAttribute('aria-modal', 'true');
+    for (let i = 0; i < 14; i++) await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), 'Tab stays in the drawer').toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toHaveCount(0);
+    await expect(menu).toBeFocused();
+
+    // the backdrop closes it too
+    await menu.click();
+    await page.locator('[data-rail-backdrop]').click({ position: { x: page.viewportSize()!.width - 10, y: 200 } });
+    await expect(drawer(page)).toHaveCount(0);
+
+    await openDashboard(page, 'Team');
+    const sheet = page.getByRole('dialog', { name: 'Team' });
+    await expect(sheet).toHaveAttribute('aria-modal', 'true');
+    await expect(sheet).toBeFocused();
+    for (let i = 0; i < 14; i++) await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('[data-canvas]')), 'Tab stays in the sheet').toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(canvas(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/hermes$/);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}
+
+// ------------------------------------------------------------------ not found and hidden projects
+
+test('an unknown address shows a Not found canvas beside the conversation', async ({ page }) => {
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/projects/zephyr');
-  await expect(page.locator('h1')).toHaveText('No page at /hermes/projects/zephyr');
+  await expect(canvas(page)).toHaveAttribute('aria-label', 'Not found');
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'No page at /hermes/projects/zephyr' })).toBeAttached();
   await expect(page).toHaveTitle('Page not found · Hermes');
-  await page.getByRole('link', { name: 'Back to Home' }).click();
-  await expect(page).toHaveURL(/\/hermes\/?$/);
+  await expect(conversation(page)).toBeAttached();
+  await closeCanvas(page);
+});
+
+test('Sara at Beacon, another team’s project: a Not found canvas and the conversation intact', async ({ page }) => {
+  await signInAs(page, 'p-sara');
+  await page.goto('/hermes/projects/beacon');
+  await expect(canvas(page)).toHaveAttribute('aria-label', 'Not found');
+  await expect(page).toHaveTitle('Page not found · Hermes');
+  await expect(canvas(page).getByText(/budget/i)).toHaveCount(0);
+  await expect(conversation(page)).toBeAttached();
+  await expect(composer(page)).toBeAttached();
+});
+
+test('Maya sees Beacon’s budget; switching to Sara turns the canvas into Not found at once', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/projects/beacon');
+  await expect(canvas(page).getByRole('heading', { name: 'Budget' })).toBeVisible();
+  if (narrow(page)) {
+    // the sheet is modal: close it, switch, and come back to the same address
+    await closeCanvas(page);
+    await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+    await page.goBack();
+  } else {
+    await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+  }
+  await expect(page).toHaveURL(/\/hermes\/projects\/beacon$/);
+  await expect(canvas(page)).toHaveAttribute('aria-label', 'Not found');
+  await expect(canvas(page).getByRole('heading', { name: 'Budget' })).toHaveCount(0);
+  await expect(page).toHaveTitle('Page not found · Hermes');
+});
+
+test('Maya sees Atlas’s budget; as Sara the same view has none', async ({ page }) => {
+  test.skip(narrow(page), 'the switch with the canvas open needs the desktop rail');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/projects/atlas');
+  await expect(canvas(page).getByRole('heading', { name: 'Budget' })).toBeVisible();
+  await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+  await expect(canvas(page).getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
+  await expect(canvas(page).getByText(/budget/i)).toHaveCount(0);
 });
 
 // A static host (GitHub Pages) has no file for an unknown address, so it answers with dist/404.html and a 404 status.
@@ -83,14 +441,13 @@ test.describe('on a static host', () => {
     await page.route(`**${path}`, (route) => route.fulfill({ status: 404, contentType: 'text/html', body: html }));
   };
 
-  test('an unknown Hermes address shows the Hermes not-found page', async ({ page }) => {
+  test('an unknown Hermes address shows the Hermes workspace with a Not found canvas', async ({ page }) => {
     await serve404(page, '/hermes/projects/zephyr');
     await signInAs(page, 'p-maya');
     await page.goto('/hermes/projects/zephyr');
-    await expect(page.locator('h1')).toHaveText('No page at /hermes/projects/zephyr');
+    await expect(canvas(page).getByRole('heading', { level: 2, name: 'No page at /hermes/projects/zephyr' })).toBeAttached();
     await expect(page).toHaveTitle('Page not found · Hermes');
-    await expect(page.getByRole('button', { name: /Maya Chen/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Hermes' })).toBeVisible();
+    await expect(conversation(page)).toBeAttached();
   });
 
   test('signed out, it goes through the Hermes sign-in first', async ({ page }) => {
@@ -108,55 +465,13 @@ test.describe('on a static host', () => {
   });
 });
 
-// ------------------------------------------------------------------ pages
-
-const DEVELOPER_COPY = "Individual hours for other people are visible to managers. Here's your team's total instead.";
-const composer = (page: Page) => page.getByRole('textbox', { name: 'Ask Hermes' });
-const panel = (page: Page) => page.getByRole('complementary', { name: 'Hermes' }).or(page.getByRole('dialog', { name: 'Hermes' }));
-
-async function ask(page: Page, question: string) {
-  await composer(page).fill(question);
-  await composer(page).press('Enter');
-}
-
-test('Home greets Maya with the glance and the assistant in the page, and no dock', async ({ page }) => {
-  await signInAs(page, 'p-maya');
-  await page.goto('/hermes');
-  await expect(page.locator('h1')).toHaveText(/^Good .*Maya$/);
-  const glance = page.getByRole('region', { name: 'Today at a glance' });
-  for (const label of ['Hours logged this week', 'PRs merged', 'Tickets closed', 'Open blockers']) {
-    await expect(glance.getByText(label, { exact: true })).toBeVisible();
-  }
-  await expect(composer(page)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open Hermes' })).toHaveCount(0);
-  // nothing has been cleared yet
-  await expect(page.getByRole('region', { name: 'Recent conversations' })).toHaveCount(0);
-});
-
-test('a cleared conversation on Home comes back from Recent conversations', async ({ page }) => {
-  await signInAs(page, 'p-maya');
-  await page.goto('/hermes');
-  await ask(page, 'How is the team doing?');
-  const thread = page.getByRole('main').getByRole('list', { name: 'Conversation' });
-  await expect(thread.locator('[data-turn="done"]')).toHaveCount(1);
-
-  await page.getByRole('button', { name: 'Clear conversation' }).click();
-  await expect(thread).toHaveCount(0);
-  await expect(composer(page)).toBeFocused();
-  const recent = page.getByRole('region', { name: 'Recent conversations' });
-  await expect(recent.getByRole('button', { name: 'How is the team doing?' })).toBeVisible();
-
-  await recent.getByRole('button', { name: 'How is the team doing?' }).click();
-  await expect(thread.locator('[data-turn="done"]')).toHaveCount(1);
-  await expect(thread.getByText('How is the team doing?', { exact: true })).toBeVisible();
-  await expect(recent).toHaveCount(0);
-});
+// ------------------------------------------------------------------ views by role, through the canvas
 
 test('Team as Sara: her own row and the Platform total, with the Developer copy', async ({ page }) => {
   await signInAs(page, 'p-sara');
   await page.goto('/hermes/team');
-  await expect(page.getByText(DEVELOPER_COPY, { exact: true })).toBeVisible();
-  const rows = page.getByRole('main').locator('table tbody tr');
+  await expect(canvas(page).getByText(DEVELOPER_COPY, { exact: true })).toBeVisible();
+  const rows = canvas(page).locator('table tbody tr');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0).locator('th')).toHaveText('Sara Lindqvist');
   await expect(rows.nth(1).locator('th')).toHaveText('Platform team total');
@@ -165,7 +480,7 @@ test('Team as Sara: her own row and the Platform total, with the Developer copy'
 test('Team as Maya: everyone in the delivery teams, one row each', async ({ page }) => {
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/team');
-  const names = page.getByRole('main').locator('table tbody tr th');
+  const names = canvas(page).locator('table tbody tr th');
   await expect(names).toHaveCount(12);
   const all = await names.allTextContents();
   expect(all).toContain('Daniel Okafor');
@@ -175,175 +490,95 @@ test('Team as Maya: everyone in the delivery teams, one row each', async ({ page
   await expect(page.getByText(DEVELOPER_COPY)).toHaveCount(0);
 });
 
-test('Projects as Sara: her team’s two projects, and another team’s project is not found', async ({ page }) => {
+test('Team as Daniel (Manager): Platform people by name, the other team as a total, and the Manager copy', async ({ page }) => {
+  await signInAs(page, 'p-daniel');
+  await page.goto('/hermes/team');
+  const rows = canvas(page).locator('table tbody tr');
+  await expect(canvas(page).getByText(MANAGER_COPY, { exact: true })).toBeVisible();
+  await expect(rows.filter({ hasText: 'Product team total' })).toHaveCount(1);
+  const names = await canvas(page).locator('table tbody tr th').allTextContents();
+  expect(names).toContain('Product team total');
+  expect(names).toContain('Sara Lindqvist');
+  expect(names).not.toContain('Platform team total');
+  expect(names.length).toBeGreaterThan(3);
+  for (const row of await rows.all()) {
+    const name = await row.locator('th').innerText();
+    if (name !== 'Product team total') await expect(row).toContainText('Platform');
+  }
+  await expect(page.getByText(DEVELOPER_COPY)).toHaveCount(0);
+});
+
+test('Projects as Sara: her team’s two projects, and Open Atlas swaps the canvas to Atlas', async ({ page }) => {
   await signInAs(page, 'p-sara');
   await page.goto('/hermes/projects');
-  const cards = page.getByRole('main').locator('.as-status');
+  const cards = canvas(page).locator('.as-status');
   await expect(cards).toHaveCount(2);
-  await expect(page.getByRole('main').getByRole('link', { name: 'Open Atlas' })).toBeVisible();
-
-  await page.goto('/hermes/projects/beacon');
-  await expect(page.locator('h1')).toHaveText('No page at /hermes/projects/beacon');
-  await expect(page).toHaveTitle('Page not found · Hermes');
+  await canvas(page).getByRole('link', { name: 'Open Atlas' }).click();
+  await expect(page).toHaveURL(/\/hermes\/projects\/atlas$/);
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Atlas' })).toBeAttached();
 });
 
 test('Atlas as Maya: status, blocked tickets and the budget', async ({ page }) => {
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/projects/atlas');
-  await expect(page.locator('h1')).toHaveText('Atlas');
-  await expect(page.getByRole('main').getByText('At risk', { exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
-  await expect(page.getByRole('heading', { name: 'Budget' })).toBeVisible();
-  await expect(page.getByText(/^Last sprint: \d+ \/ \d+ points$/)).toBeVisible();
+  await expect(canvas(page)).toHaveAttribute('aria-label', 'Atlas');
+  await expect(canvas(page).getByText('At risk', { exact: true })).toBeVisible();
+  await expect(canvas(page).getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
+  await expect(canvas(page).getByRole('heading', { name: 'Budget' })).toBeVisible();
+  await expect(canvas(page).getByText(/^Last sprint: \d+ \/ \d+ points$/)).toBeVisible();
 });
 
 test('Atlas as Sara: no budget', async ({ page }) => {
   await signInAs(page, 'p-sara');
   await page.goto('/hermes/projects/atlas');
-  await expect(page.getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
-  await expect(page.getByRole('main').getByText(/budget/i)).toHaveCount(0);
+  await expect(canvas(page).getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
+  await expect(canvas(page).getByText(/budget/i)).toHaveCount(0);
 });
 
-test('on a project page, "How is this one doing?" answers about that project', async ({ page }) => {
+test('with Atlas in the canvas, "How is this one doing?" answers about Atlas', async ({ page }) => {
+  test.skip(narrow(page), 'the sheet covers the composer below 1024px');
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/projects/atlas');
-  await expect(page.locator('h1')).toHaveText('Atlas');
-  await page.getByRole('button', { name: 'Open Hermes' }).click();
-  await panel(page).getByRole('button', { name: 'How is this one doing?' }).click();
-  await expect(panel(page).locator('[data-turn="done"]')).toHaveCount(1);
-  await expect(panel(page).getByText(/Atlas is (on track|at risk|off track)/)).toBeVisible();
+  await expect(canvas(page).getByRole('heading', { level: 2, name: 'Atlas' })).toBeAttached();
+  await conversation(page).getByRole('button', { name: 'How is this one doing?' }).click();
+  await expect(turns(page)).toHaveAttribute('data-turn', 'done', { timeout: 20_000 });
+  await expect(turns(page).getByText(/Atlas is (on track|at risk|off track)/)).toBeVisible();
 });
 
-test('Connections: a simulated Jira outage shows on the page and in the answer', async ({ page }) => {
+test('Connections: a simulated Jira outage shows in the view and in the answer', async ({ page }) => {
   await signInAs(page, 'p-maya');
   await page.goto('/hermes/connections');
-  const rows = page.getByRole('main').getByRole('listitem');
+  const rows = canvas(page).getByRole('listitem');
   for (const system of ['Directory', 'Clockify', 'Jira', 'GitHub', 'Teams', 'AWS']) {
     await expect(rows.filter({ has: page.getByRole('heading', { name: system, exact: true }) })).toContainText('Connected');
   }
   for (const later of ['Slack', 'Google Drive', 'Salesforce']) {
     await expect(rows.filter({ has: page.getByRole('heading', { name: later, exact: true }) })).toContainText('Coming later');
   }
-
   const jira = rows.filter({ has: page.getByRole('heading', { name: 'Jira', exact: true }) });
   await jira.getByRole('checkbox', { name: /Simulate an outage/ }).check();
   await expect(jira).toContainText('Outage (simulated)');
 
-  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  if (narrow(page)) await closeCanvas(page);
   await ask(page, 'How is the team doing?');
-  await expect(panel(page).getByText("Jira didn't respond, so closed tickets and blockers aren't included.")).toBeVisible();
+  await expect(conversation(page).getByText("Jira didn't respond, so closed tickets and blockers aren't included.")).toBeVisible();
 });
-
-// ------------------------------------------------------------------ smoke, roles and switching
-
-const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
-
-// Every Hermes page: right title, one h1, no sideways scroll (at this project's viewport and at 375px), no serious axe violations.
-for (const path of HERMES_PATHS) {
-  test(`smoke ${path}`, async ({ page }) => {
-    // the sign-in page is the one page a signed-in visitor can still open
-    if (path !== '/hermes/sign-in') await signInAs(page, 'p-maya');
-    await page.goto(path);
-    await expect(page).toHaveTitle(hermesPageMeta(path)!.title);
-    const h1 = page.locator('h1:visible');
-    await expect(h1).toHaveCount(1);
-    await expect(h1).toBeVisible();
-
-    const overflow = async () => (await page.evaluate(() => document.documentElement.scrollWidth)) - (await page.evaluate(() => window.innerWidth));
-    expect(await overflow(), 'page is wider than the viewport').toBeLessThanOrEqual(0);
-
-    // measure contrast once the page's fade-in has finished
-    await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.route')!).opacity)).toBe('1');
-    const axe = await new AxeBuilder({ page }).include('main').include('header').exclude('canvas').exclude('svg').analyze();
-    const serious = axe.violations
-      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-      .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
-    expect(serious, 'accessibility violations').toEqual([]);
-
-    // and again at exactly 375px wide, once the page has re-laid itself out
-    await page.setViewportSize({ width: 375, height: 812 });
-    await page.reload();
-    await expect(page.locator('h1:visible')).toHaveCount(1);
-    await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.route')!).opacity)).toBe('1');
-    expect(await overflow(), 'page is wider than 375px').toBeLessThanOrEqual(0);
-  });
-}
-
-async function openPanel(page: Page) {
-  await page.getByRole('button', { name: 'Open Hermes' }).click();
-  await expect(composer(page)).toBeFocused();
-}
-
-// On a desktop the side panel shares the screen, so the user menu is reachable with it open. Below 1024px the panel is modal, so
-// close it first (a running reply keeps going), switch user through the menu, then reopen it.
-async function switchTo(page: Page, from: string, to: string) {
-  const modal = (await page.getByRole('dialog', { name: 'Hermes' }).count()) > 0;
-  if (modal) {
-    await page.keyboard.press('Escape');
-    await expect(panel(page)).toHaveCount(0);
-  }
-  await page.getByRole('button', { name: new RegExp(from) }).click();
-  await page.getByRole('menuitem', { name: new RegExp(`Switch demo user.*${to}`) }).click();
-  await expect(page.getByRole('button', { name: new RegExp(to) })).toBeVisible();
-  if (modal) await openPanel(page);
-  else await expect(panel(page)).toBeVisible();
-}
-
-test('at 1280px the open panel leaves the header, the user menu and the page beside it', async ({ page, isMobile }) => {
-  test.skip(isMobile, 'desktop only');
-  await signInAs(page, 'p-maya');
-  await page.goto('/hermes/team');
-  await openPanel(page);
-  const box = (await panel(page).boundingBox())!;
-  const beside = [
-    page.getByRole('button', { name: /Maya Chen/ }),
-    page.getByRole('banner').getByRole('button', { name: 'Ask Hermes' }),
-    page.getByRole('main').locator('table'),
-  ];
-  for (const target of beside) {
-    const b = (await target.boundingBox())!;
-    expect(b.x + b.width, 'covered by the panel').toBeLessThanOrEqual(box.x);
-  }
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow, 'page is wider than the viewport').toBeLessThanOrEqual(0);
-  // the user menu works with the panel open, and the panel stays
-  await page.getByRole('button', { name: /Maya Chen/ }).click();
-  await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(panel(page)).toBeVisible();
-});
-
-for (const width of [768, 900, 1023]) {
-  test(`at ${width}px the panel is a modal dialog that keeps focus`, async ({ page, isMobile }) => {
-    test.skip(isMobile, 'desktop only');
-    await page.setViewportSize({ width, height: 800 });
-    await signInAs(page, 'p-maya');
-    await page.goto('/hermes/team');
-    await openPanel(page);
-    await expect(page.getByRole('dialog', { name: 'Hermes' })).toHaveAttribute('aria-modal', 'true');
-    for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
-    expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
-    await page.keyboard.press('Escape');
-    await expect(panel(page)).toHaveCount(0);
-  });
-}
 
 test('role difference: Maya sees every developer, Sara only herself and her team total', async ({ page }) => {
   await signInAs(page, 'p-maya');
-  await page.goto('/hermes/team');
-  await openPanel(page);
+  await page.goto('/hermes');
   await ask(page, 'How many hours did developers work this week?');
-  const table = panel(page).locator('[data-turn="done"]').last().locator('table.as-table');
-  await expect(table).toBeVisible();
+  const table = turns(page).last().locator('table.as-table');
+  await expect(table).toBeVisible({ timeout: 20_000 });
   expect(await table.locator('tbody tr').count(), 'rows for every developer').toBeGreaterThan(2);
 
   await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
-  await expect(panel(page).getByText(/^Hi Sara\./)).toBeVisible();
-  await expect(panel(page).locator('[data-turn]')).toHaveCount(0);
+  await expect(turns(page)).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveText(/Sara$/);
 
   await ask(page, 'How many hours did developers work this week?');
-  const answer = panel(page).locator('[data-turn="done"]');
-  await expect(answer).toHaveCount(1);
+  const answer = conversation(page).locator('[data-turn="done"]');
+  await expect(answer).toHaveCount(1, { timeout: 20_000 });
   await expect(answer.getByText(DEVELOPER_COPY, { exact: true })).toBeVisible();
   const rows = answer.locator('table.as-table tbody tr');
   await expect(rows).toHaveCount(2);
@@ -353,71 +588,43 @@ test('role difference: Maya sees every developer, Sara only herself and her team
 
 test('switching user while a reply is still being written leaves an empty thread and no old answer', async ({ page }) => {
   await signInAs(page, 'p-maya');
-  await page.goto('/hermes/team');
-  await openPanel(page);
+  await page.goto('/hermes');
   const asked = Date.now();
   await ask(page, 'How is the team doing?');
-  // the question is in; do not wait for the reply
-  await expect(panel(page).locator('[data-turn]')).toHaveCount(1);
-  // and the reply is still being worked out or written, not finished, as the switch starts
-  await expect(panel(page).locator('[data-turn]')).toHaveAttribute('data-turn', /^(working|writing)$/);
-  await expect(panel(page).getByRole('button', { name: 'Stop' })).toBeVisible();
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turns(page)).toHaveAttribute('data-turn', /^(working|writing)$/);
 
   await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
-
-  const stats = panel(page).locator('.as-stat');
-  const turns = panel(page).locator('[data-turn]');
+  const stats = conversation(page).locator('.as-stat');
   // at least 3 s, and long enough to outlast the old reply, which takes about 7 s to finish
   const until = Math.max(Date.now() + 3000, asked + 10_000);
   let polls = 0;
   while (Date.now() < until) {
-    expect(await turns.count(), 'the old question or reply came back').toBe(0);
+    expect(await turns(page).count(), 'the old question or reply came back').toBe(0);
     expect(await stats.count(), 'a stat block from the old reply appeared').toBe(0);
     polls++;
     await page.waitForTimeout(100);
   }
   expect(polls).toBeGreaterThan(10);
-  // the thread still works for the new user
-  await expect(panel(page).getByText(/^Hi Sara\./)).toBeVisible();
   await ask(page, 'How is the team doing?');
-  await expect(panel(page).locator('[data-turn="done"]')).toHaveCount(1);
+  await expect(conversation(page).locator('[data-turn="done"]')).toHaveCount(1, { timeout: 20_000 });
 });
 
 test('AWS costs: Maya gets the chart and the cause, Daniel is told they are for leadership', async ({ page }) => {
   await signInAs(page, 'p-maya');
-  await page.goto('/hermes/team');
-  await openPanel(page);
+  await page.goto('/hermes');
   await ask(page, 'Why did AWS costs go up?');
-  const answer = panel(page).locator('[data-turn="done"]');
-  await expect(answer).toHaveCount(1);
+  const answer = conversation(page).locator('[data-turn="done"]');
+  await expect(answer).toHaveCount(1, { timeout: 20_000 });
   await expect(answer.locator('svg[role="img"]')).toBeVisible();
   await expect(answer.getByText(/12 extra instances/)).toBeVisible();
 
   await switchTo(page, 'Maya Chen', 'Daniel Okafor');
-  await expect(panel(page).locator('[data-turn]')).toHaveCount(0);
+  await expect(turns(page)).toHaveCount(0);
   await ask(page, 'Why did AWS costs go up?');
-  const denied = panel(page).locator('[data-turn="done"]');
-  await expect(denied).toHaveCount(1);
+  const denied = conversation(page).locator('[data-turn="done"]');
+  await expect(denied).toHaveCount(1, { timeout: 20_000 });
   await expect(denied.getByText(/AWS costs are visible to leadership\./)).toBeVisible();
   await expect(denied.getByText(/I can show AWS service health instead\./)).toBeVisible();
   await expect(denied.locator('svg[role="img"]')).toHaveCount(0);
-});
-
-test('Team as Daniel (Manager): Platform people by name, the other team as a total, and the Manager copy', async ({ page }) => {
-  await signInAs(page, 'p-daniel');
-  await page.goto('/hermes/team');
-  const rows = page.getByRole('main').locator('table tbody tr');
-  await expect(page.getByText(MANAGER_COPY, { exact: true })).toBeVisible();
-  await expect(rows.filter({ hasText: 'Product team total' })).toHaveCount(1);
-  const names = await page.getByRole('main').locator('table tbody tr th').allTextContents();
-  expect(names).toContain('Product team total');
-  expect(names).toContain('Sara Lindqvist');
-  expect(names).not.toContain('Platform team total');
-  // every row besides the Product total is a named Platform person
-  expect(names.length).toBeGreaterThan(3);
-  for (const row of await rows.all()) {
-    const name = await row.locator('th').innerText();
-    if (name !== 'Product team total') await expect(row).toContainText('Platform');
-  }
-  await expect(page.getByText(DEVELOPER_COPY)).toHaveCount(0);
 });

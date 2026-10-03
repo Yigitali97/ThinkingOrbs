@@ -1,11 +1,18 @@
-// The header's account control: who is signed in, a way to switch to another demo user, and sign out.
-// Arrow keys move through the items, Escape closes the menu and returns focus to the button.
+// The rail's account control, at its foot: who is signed in, a way to switch to another demo user, and sign out.
+// The menu opens upward from the button. Arrow keys move through the items, Escape closes it and returns focus to the button.
 
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import type { User } from '../assistant/protocol';
 import { navigate } from '../site/router';
 import { DEMO_USERS, signIn, signOut } from './auth';
 import { HERMES_ROOT } from './config';
+
+/** "Maya Chen" → "MC". */
+export const initials = (name: string): string =>
+  name
+    .split(' ')
+    .map((w) => w[0])
+    .join('');
 
 export function UserMenu({ user }: { user: User }) {
   const [open, setOpen] = useState(false);
@@ -64,13 +71,18 @@ export function UserMenu({ user }: { user: User }) {
         aria-controls={open ? 'user-menu-list' : undefined}
         onClick={() => setOpen((o) => !o)}
       >
+        <span className="avatar avatar-sm" aria-hidden="true">
+          {initials(user.name)}
+        </span>
         <span className="user-button-text">
           <span className="user-button-name">{user.name}</span>
-          <span className="user-button-title">{user.title}</span>
+          <span className="user-button-meta">
+            <span className="user-button-title">{user.title}</span>
+            <span className="demo-tag">Demo user</span>
+          </span>
         </span>
-        <span className="demo-tag">Demo user</span>
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="chevron">
-          <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M2.5 7.5 6 4l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
       {open && (

@@ -1,4 +1,4 @@
-// The Projects page: a status card for each project the user may see, by the same rule the assistant answers with.
+// The Projects view: a status card for each project the user may see, by the same rule the assistant answers with.
 
 import { useAssistant } from '../../assistant/AssistantProvider';
 import { Status } from '../../assistant/blocks/Blocks';
@@ -38,14 +38,14 @@ export function Projects() {
   const onTrack = data?.cards.filter((c) => c.status === 'on-track').length ?? 0;
 
   return (
-    <div className="page as">
-      <h1>Projects</h1>
+    <div className="view as">
+      <h2 className="view-title">Projects</h2>
       <p className="lede">
         On track, at risk or off track, from sprint velocity against the target date, blocked tickets and pull requests waiting for review.
       </p>
-      <section className="page-section" aria-busy={!data && !broken}>
+      <section className="view-section" aria-busy={!data && !broken}>
         <div className="section-head">
-          <h2>{user?.role === 'developer' ? 'Your team’s projects' : 'All projects'}</h2>
+          <h3>{user?.role === 'developer' ? 'Your team’s projects' : 'All projects'}</h3>
           {data && !data.failed && (
             <p className="section-note">
               {onTrack} of {data.cards.length} on track

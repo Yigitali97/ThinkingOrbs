@@ -1,4 +1,4 @@
-// The Team page: hours logged this week against capacity so far, for the delivery teams (Ruling R1).
+// The Team view: hours logged this week against capacity so far, for the delivery teams (Ruling R1).
 // Leadership sees everyone, a Manager their own team plus other teams' totals, a Developer themself plus their team's total.
 
 import { usePageContext } from '../../assistant/usePageContext';
@@ -68,13 +68,13 @@ export function Team() {
   const [data, broken] = usePageData(loadTeam);
 
   return (
-    <div className="page as">
-      <h1>Team</h1>
+    <div className="view as">
+      <h2 className="view-title">Team</h2>
       <p className="lede">
         Hours logged since Monday against each person’s capacity so far: their weekly hours, pro-rated to the working time gone.
         Over is more than 110% of it, under is less than 70%.
       </p>
-      <div className="page-section" aria-busy={!data && !broken}>
+      <div className="view-section" aria-busy={!data && !broken}>
         {!data ? (
           <Loading size="table" failed={broken} />
         ) : data.failed ? (
@@ -82,7 +82,7 @@ export function Team() {
         ) : (
           <>
             {data.restricted && <p className="note">{data.restricted}</p>}
-            <div className="page-table">
+            <div className="view-table">
               <Table columns={data.columns} rows={data.rows} caption={`Hours this week, ${listOf(data.teams)}`} />
             </div>
           </>
