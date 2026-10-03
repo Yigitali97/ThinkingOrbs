@@ -173,3 +173,33 @@ test('pressing Stop from the keyboard keeps focus in the panel', async ({ page, 
     expect(await inPanel()).toBe(true);
   }
 });
+
+test('without speech recognition there is no voice mode or dictation, and typing still answers', async ({ page }) => {
+  // this Chromium has a speech recognition constructor, so take it away before the page loads
+  await page.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown>;
+    delete w.SpeechRecognition;
+    delete w.webkitSpeechRecognition;
+  });
+  await page.reload();
+  expect(await page.evaluate(() => 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window)).toBe(false);
+  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  await expect(composer(page)).toBeFocused();
+  await expect(panel(page).getByRole('button', { name: 'Voice mode' })).toHaveCount(0);
+  await expect(panel(page).getByRole('button', { name: 'Dictate' })).toHaveCount(0);
+  await ask(page, 'How many hours did developers work this week?');
+  await expect(panel(page).locator('svg[role="img"]')).toBeVisible();
+});
+
+// this Chromium has both speech recognition and synthesis, so the button is offered
+test('voice mode replaces the message box, and End voice mode brings it back with focus', async ({ page }) => {
+  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  const voice = panel(page).getByRole('button', { name: 'Voice mode' });
+  await voice.click();
+  const end = panel(page).getByRole('button', { name: 'End voice mode' });
+  await expect(end).toBeFocused();
+  await expect(composer(page)).toHaveCount(0);
+  await end.click();
+  await expect(composer(page)).toBeFocused();
+  await expect(voice).toBeVisible();
+});

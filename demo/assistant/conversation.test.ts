@@ -6,6 +6,7 @@ import { createConversation } from './conversation';
 import type { AgentDefinition, Brain } from './protocol';
 import { createAssistantReply } from './reply';
 import { speakable } from './speakable';
+import { voiceResponder } from './voice';
 
 let lastSignal: AbortSignal | undefined;
 
@@ -135,5 +136,31 @@ describe('speakable', () => {
     const r = { ...createAssistantReply('r', 0), text: 'Done.' };
     expect(speakable(r)).toBe('Done.');
     expect(speakable({ ...r, blocks: [{ kind: 'link', label: 'x', href: '/x' }] })).toBe('Done.');
+  });
+});
+
+describe('voiceResponder', () => {
+  it('resolves to what the reply sounds like', async () => {
+    const c = make();
+    const text = await voiceResponder(c)('hi', new AbortController().signal);
+    expect(text).toBe('one two three');
+    expect(c.getSnapshot().turns.map((t) => [t.question, t.reply.state])).toEqual([['hi', 'done']]);
+  });
+
+  it('stops the running reply and resolves to nothing when the voice loop aborts', async () => {
+    const c = make();
+    const ctl = new AbortController();
+    const p = voiceResponder(c)('slow', ctl.signal);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(c.getSnapshot().busy).toBe(true);
+    ctl.abort();
+    expect(await p).toBe('');
+    const { turns, busy } = c.getSnapshot();
+    expect(turns.map((t) => t.reply.state)).toEqual(['stopped']);
+    expect(busy).toBe(false);
+  });
+
+  it('resolves to nothing when there was nothing to send', async () => {
+    expect(await voiceResponder(make())('  ', new AbortController().signal)).toBe('');
   });
 });

@@ -6,6 +6,8 @@ import { VoiceOrb } from '../../src/orbs';
 import { useDictation } from '../chat-app/useDictation';
 import { useUploads } from '../chat-app/useUploads';
 import { useAssistant } from './AssistantProvider';
+import { VoiceMode } from './VoiceMode';
+import { voiceSupported } from './voice';
 
 /** Moves focus to the assistant's message box, wherever it is on screen. */
 export function focusComposer(): boolean {
@@ -21,6 +23,8 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
   const [draft, setDraft] = useState('');
   const { uploads, attachFiles, removeUpload, takeReady } = useUploads();
   const dictation = useDictation(setDraft);
+  const [voice, setVoice] = useState(false);
+  const canVoice = voiceSupported();
   const fileRef = useRef<HTMLInputElement>(null);
   const ownRef = useRef<HTMLTextAreaElement>(null);
   const textRef = inputRef ?? ownRef;
@@ -37,6 +41,13 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
   }, [draft, textRef]);
 
+  // ending voice mode puts you back in the message box
+  const wasVoice = useRef(false);
+  useEffect(() => {
+    if (wasVoice.current && !voice) textRef.current?.focus();
+    wasVoice.current = voice;
+  }, [voice, textRef]);
+
   const send = () => {
     if (!canSend) return;
     if (dictation.active) dictation.stop();
@@ -50,6 +61,14 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
       send();
     }
   };
+
+  if (voice) {
+    return (
+      <div className="as-composer">
+        <VoiceMode onEnd={() => setVoice(false)} />
+      </div>
+    );
+  }
 
   return (
     <form
@@ -124,6 +143,22 @@ export function Composer({ inputRef }: { inputRef?: RefObject<HTMLTextAreaElemen
                 <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
               </svg>
             )}
+          </button>
+        )}
+        {canVoice && (
+          <button
+            type="button"
+            className="as-icon-btn"
+            onClick={() => {
+              if (dictation.active) dictation.stop();
+              setVoice(true);
+            }}
+            aria-label="Voice mode"
+            title="Voice mode"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" />
+            </svg>
           </button>
         )}
         {busy ? (
