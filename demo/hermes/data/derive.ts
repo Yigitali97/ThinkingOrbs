@@ -25,6 +25,13 @@ export function proRatedCapacity(person: Person, now: Date): number {
   return (person.capacityHours * elapsed) / 5;
 }
 
+/** Capacity accrued between two instants, on the same pro-rated rule (whole weeks plus the elapsed part of each week). */
+export function capacityBetween(person: Person, from: Date, to: Date): number {
+  if (to.getTime() <= from.getTime()) return 0;
+  const weeks = Math.round((weekStart(to).getTime() - weekStart(from).getTime()) / (7 * DAY_MS));
+  return weeks * person.capacityHours + proRatedCapacity(person, to) - proRatedCapacity(person, from);
+}
+
 /** Hours logged by a person from Monday of this week up to `now`. */
 export function weekToDateHours(c: Company, personId: string, now: Date): number {
   const from = weekStart(now).getTime();
@@ -49,22 +56,26 @@ export function velocity(projectId: ProjectId, sprints: Sprint[]): number {
   return last.reduce((sum, s) => sum + s.completedPoints, 0) / last.length;
 }
 
-export function remainingPoints(projectId: ProjectId, c: Company): number {
+/** The parts of the company the project rules read, so tool results can be passed in place of a whole Company. */
+export type ProjectData = Pick<Company, 'issues' | 'prs' | 'sprints'>;
+
+export function remainingPoints(projectId: ProjectId, c: Pick<Company, 'issues'>): number {
   return c.issues.filter((i) => i.projectId === projectId && i.status !== 'done').reduce((sum, i) => sum + i.points, 0);
 }
 
-export function blockedIssues(projectId: ProjectId, c: Company) {
+export function blockedIssues(projectId: ProjectId, c: Pick<Company, 'issues'>) {
   return c.issues.filter((i) => i.projectId === projectId && i.status !== 'done' && i.blocked);
 }
 
 /** Open pull requests with no review yet after more than three days. */
-export function waitingPrs(projectId: ProjectId, c: Company, now: Date) {
+export function waitingPrs(projectId: ProjectId, c: Pick<Company, 'prs'>, now: Date) {
   return c.prs.filter(
     (p) => p.projectId === projectId && !p.merged && !p.firstReviewAt && now.getTime() - p.opened > STALE_REVIEW_DAYS * DAY_MS,
   );
 }
 
-export function projectStatus(project: Project, c: Company, now: Date): { status: ProjectHealth; reasons: string[] } {
+/** The status rules (spec §4.6). Takes only what it reads, so the assistant can apply them to policy-filtered tool results. */
+export function projectStatus(project: Pick<Project, 'id' | 'target'>, c: ProjectData, now: Date): { status: ProjectHealth; reasons: string[] } {
   const reasons: string[] = [];
   const remaining = remainingPoints(project.id, c);
   const v = velocity(project.id, c.sprints);
