@@ -4,7 +4,7 @@ import { DOCS } from './docs';
 import { highlight } from './highlight';
 import { isActive, normalisePath, parseHref, stripBase } from './router';
 import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta, SITE_LINKS } from './routes';
-import { withMeta } from '../../vite.config';
+import { notFoundPage, withMeta } from '../../vite.config';
 import { COMPANY } from '../hermes/store';
 import { HERMES_PATHS, hermesPageMeta, hermesProjectId } from '../hermes/routes';
 import * as orbs from '../../src/orbs';
@@ -136,6 +136,44 @@ describe('prerendered pages', () => {
     expect(html).toContain('<meta name="description" content="Desc" />');
     expect(html).toContain('<meta property="og:title" content="A &lt;b&gt; &amp; &quot;c&quot;" />');
     expect(html).not.toContain('old');
+  });
+});
+
+describe('the static 404 page', () => {
+  const shell = (name: string) =>
+    `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <title>${name}</title>\n    <meta name="description" content="x" />\n` +
+    `    <script type="module" crossorigin src="/assets/${name}.js"></script>\n  </head>\n  <body>\n    <div id="root"></div>\n  </body>\n</html>\n`;
+  /** Runs the page's inline script at `path` and returns what it wrote into the head. */
+  const written = (html: string, path: string) => {
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
+    let out = '';
+    new Function('location', 'document', script)({ pathname: path }, { write: (s: string) => (out += s) });
+    return out;
+  };
+  const page = (base: string) =>
+    notFoundPage(base, { html: shell('docs'), title: 'Page not found · Docs' }, [{ prefix: 'hermes', html: shell('hermes'), title: 'Page not found · Hermes' }]);
+
+  it.each([
+    ['/', '/hermes/projects/zephyr', 'hermes'],
+    ['/', '/hermes', 'hermes'],
+    ['/', '/hermes/', 'hermes'],
+    ['/', '/hermesx', 'docs'],
+    ['/', '/components/nope', 'docs'],
+    ['/ThinkingOrbs/', '/ThinkingOrbs/hermes/projects/zephyr', 'hermes'],
+    ['/ThinkingOrbs/', '/ThinkingOrbs/nope', 'docs'],
+    ['/ThinkingOrbs/', '/hermes/team', 'docs'],
+  ])('with base %s, %s boots the %s app', (base, path, site) => {
+    const head = written(page(base), path);
+    expect(head).toContain(`src="/assets/${site}.js"`);
+    expect(head).toContain(`<title>Page not found · ${site === 'hermes' ? 'Hermes' : 'Docs'}</title>`);
+    expect(head).not.toContain(`src="/assets/${site === 'hermes' ? 'docs' : 'hermes'}.js"`);
+  });
+
+  it('has one root and no static entry script of its own', () => {
+    const html = page('/');
+    expect(html.match(/<div id="root"><\/div>/g)).toHaveLength(1);
+    expect(html).not.toMatch(/<script type="module"/);
+    expect(html).not.toMatch(/<\/script>[\s\S]*<\/script>[\s\S]*<\/head>/);
   });
 });
 

@@ -130,7 +130,7 @@ test('an attached image, a waiting upload and the draft outlive closing the pane
 
 test.describe('removing an upload', () => {
   // reading the revoked URL back is expected to fail
-  test.use({ allowErrors: [/^blob:|ERR_FILE_NOT_FOUND/] });
+  test.use({ allowErrors: [[/^blob:|ERR_FILE_NOT_FOUND/], { scope: 'test' }] });
 
   test('frees its preview', async ({ page }) => {
     await page.getByRole('button', { name: 'Open Hermes' }).click();

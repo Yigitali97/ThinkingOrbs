@@ -1,5 +1,7 @@
 // The Hermes site: demo sign-in and its guard, every page's title, the not-found page, and what each page shows per role.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { HERMES_PATHS, hermesPageMeta } from '../demo/hermes/routes';
@@ -65,6 +67,41 @@ test('an unknown project shows the not-found page', async ({ page }) => {
   await expect(page).toHaveTitle('Page not found · Hermes');
   await page.getByRole('link', { name: 'Back to Home' }).click();
   await expect(page).toHaveURL(/\/hermes\/?$/);
+});
+
+// A static host (GitHub Pages) has no file for an unknown address, so it answers with dist/404.html and a 404 status.
+// The preview server rewrites /hermes/* instead, so route those requests to 404.html here, the way the host would.
+test.describe('on a static host', () => {
+  // an array option is passed as [value, options], or Playwright would read the array itself as that pair
+  test.use({ allowErrors: [[/\/hermes\/projects\/zephyr$/, /\/hermes\/nowhere$/, /\/no-such-page$/, /status of 404/], { scope: 'test' }] });
+  const serve404 = async (page: Page, path: string) => {
+    const html = readFileSync(join(process.cwd(), 'dist', '404.html'), 'utf8');
+    await page.route(`**${path}`, (route) => route.fulfill({ status: 404, contentType: 'text/html', body: html }));
+  };
+
+  test('an unknown Hermes address shows the Hermes not-found page', async ({ page }) => {
+    await serve404(page, '/hermes/projects/zephyr');
+    await signInAs(page, 'p-maya');
+    await page.goto('/hermes/projects/zephyr');
+    await expect(page.locator('h1')).toHaveText('No page at /hermes/projects/zephyr');
+    await expect(page).toHaveTitle('Page not found · Hermes');
+    await expect(page.getByRole('button', { name: /Maya Chen/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Hermes' })).toBeVisible();
+  });
+
+  test('signed out, it goes through the Hermes sign-in first', async ({ page }) => {
+    await serve404(page, '/hermes/nowhere');
+    await page.goto('/hermes/nowhere');
+    await expect(page).toHaveURL(/\/hermes\/sign-in\?next=%2Fhermes%2Fnowhere$/);
+    await expect(page.locator('h1')).toHaveText('Sign in to Hermes');
+  });
+
+  test('an unknown docs address still shows the docs not-found page', async ({ page }) => {
+    await serve404(page, '/no-such-page');
+    await page.goto('/no-such-page');
+    await expect(page.locator('h1')).toHaveText('No page at /no-such-page');
+    await expect(page).toHaveTitle(/^Page not found · ThinkingOrbs$/);
+  });
 });
 
 // ------------------------------------------------------------------ pages
