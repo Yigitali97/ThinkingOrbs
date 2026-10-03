@@ -233,15 +233,53 @@ async function openPanel(page: Page) {
   await expect(composer(page)).toBeFocused();
 }
 
-// The side panel overlays the header's user menu below 1400px and the phone's sheet is modal, so close the panel first (a running reply
-// keeps going), switch user through the menu, then reopen the panel.
+// On a desktop the side panel shares the screen, so the user menu is reachable with it open. Below 1024px the panel is modal, so
+// close it first (a running reply keeps going), switch user through the menu, then reopen it.
 async function switchTo(page: Page, from: string, to: string) {
-  await page.keyboard.press('Escape');
-  await expect(panel(page)).toHaveCount(0);
+  const modal = (await page.getByRole('dialog', { name: 'Hermes' }).count()) > 0;
+  if (modal) {
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+  }
   await page.getByRole('button', { name: new RegExp(from) }).click();
   await page.getByRole('menuitem', { name: new RegExp(`Switch demo user.*${to}`) }).click();
   await expect(page.getByRole('button', { name: new RegExp(to) })).toBeVisible();
+  if (modal) await openPanel(page);
+  else await expect(panel(page)).toBeVisible();
+}
+
+test('at 1280px the open panel leaves the header, the user menu and the page beside it', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'desktop only');
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/team');
   await openPanel(page);
+  const box = (await panel(page).boundingBox())!;
+  for (const target of [page.getByRole('button', { name: /Maya Chen/ }), page.getByRole('banner').getByRole('button', { name: 'Ask Hermes' }), page.getByRole('main').locator('table')]) {
+    const b = (await target.boundingBox())!;
+    expect(b.x + b.width, 'covered by the panel').toBeLessThanOrEqual(box.x);
+  }
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, 'page is wider than the viewport').toBeLessThanOrEqual(0);
+  // the user menu works with the panel open, and the panel stays
+  await page.getByRole('button', { name: /Maya Chen/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toBeVisible();
+});
+
+for (const width of [768, 900, 1023]) {
+  test(`at ${width}px the panel is a modal dialog that keeps focus`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'desktop only');
+    await page.setViewportSize({ width, height: 800 });
+    await signInAs(page, 'p-maya');
+    await page.goto('/hermes/team');
+    await openPanel(page);
+    await expect(page.getByRole('dialog', { name: 'Hermes' })).toHaveAttribute('aria-modal', 'true');
+    for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+  });
 }
 
 test('role difference: Maya sees every developer, Sara only herself and her team total', async ({ page }) => {

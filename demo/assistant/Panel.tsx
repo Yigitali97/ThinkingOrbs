@@ -1,5 +1,6 @@
-// The assistant panel: a 420px side panel at ≥ 768px, a modal bottom sheet below that. It also owns the global
-// shortcut (/ or Cmd/Ctrl+K), which works whenever the panel is mounted, open or not.
+// The assistant panel: a 420px side panel at ≥ 768px, a bottom sheet below that. From 1024px the side panel shares the
+// screen (the page makes room for it, header included); narrower, side panel and sheet are modal, so nothing they cover
+// can take focus. It also owns the global shortcut (/ or Cmd/Ctrl+K), which works whenever the panel is mounted, open or not.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
@@ -11,6 +12,8 @@ import { EmptyThread, Thread } from './Thread';
 import './assistant.css';
 
 const WIDE = '(min-width: 768px)';
+/** wide enough for the page and the side panel side by side */
+const SHARED = '(min-width: 1024px)';
 
 function useMedia(query: string): boolean {
   const subscribe = useCallback(
@@ -72,6 +75,7 @@ const CLOSE = 'M4 4l8 8M12 4l-8 8';
 export function Panel() {
   const { agent, open, setOpen, inline, snapshot, conversation } = useAssistant();
   const wide = useMedia(WIDE);
+  const shared = useMedia(SHARED);
   const [expanded, setExpanded] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -100,15 +104,15 @@ export function Panel() {
     else setExpanded(false);
   }, [shown]);
 
-  // tell the page how the panel sits, so it can make room (side) or stop scrolling behind it (sheet, full)
+  // tell the page how the panel sits, so it can make room (side) or stop scrolling behind it (modal, full)
   useEffect(() => {
     if (!shown) return;
     const root = document.documentElement;
-    root.dataset.assistant = expanded ? 'full' : wide ? 'side' : 'sheet';
+    root.dataset.assistant = expanded ? 'full' : shared ? 'side' : 'modal';
     return () => {
       delete root.dataset.assistant;
     };
-  }, [shown, expanded, wide]);
+  }, [shown, expanded, shared]);
 
   // follow the answer as it streams, unless you have scrolled up to read; a new question always follows
   const turns = snapshot.turns.length;
@@ -123,7 +127,7 @@ export function Panel() {
   if (!shown) return null;
 
   const close = () => setOpen(false);
-  const modal = !wide;
+  const modal = !shared;
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
     if (e.key === 'Escape' && !e.defaultPrevented) {
@@ -131,7 +135,7 @@ export function Panel() {
       close();
       return;
     }
-    // the sheet is modal: Tab cycles inside it
+    // below 1024px the panel is modal: Tab cycles inside it
     if (modal && e.key === 'Tab' && panelRef.current) {
       const items = focusables(panelRef.current);
       if (!items.length) return;

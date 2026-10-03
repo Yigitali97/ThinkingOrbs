@@ -154,11 +154,11 @@
 .as-scrim { position: fixed; inset: 0; z-index: 39; background: rgb(8 10 14 / 40%); animation: as-fade 200ms both; }
 @keyframes as-fade { from { opacity: 0; } to { opacity: 1; } }
 
-/* room for the side panel on screens wide enough to share; narrower ones let it overlay */
-@media (min-width: 1400px) {
+/* from 1024px the page, header included, makes room for the side panel; narrower, the panel is modal and the page stays put */
+@media (min-width: 1024px) {
   html[data-assistant='side'] body { padding-right: var(--as-width, 420px); }
 }
-html[data-assistant='sheet'] body, html[data-assistant='full'] body { overflow: hidden; }
+html[data-assistant='modal'] body, html[data-assistant='full'] body { overflow: hidden; }
 
 .as-panel-head {
   display: flex; align-items: center; gap: 10px; flex: none;
