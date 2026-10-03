@@ -131,7 +131,7 @@ export function isActive(current: string, to: string, section = false) {
   return current === target;
 }
 
-export function Link({ to, section, match, onClick, ...rest }: LinkProps) {
+export function Link({ to, section, match, onClick, 'aria-current': ariaCurrent, ...rest }: LinkProps) {
   const loc = useLocation();
   const exact = isActive(loc.path, to) || (!section && !!match?.(loc.path));
   const inSection = isActive(loc.path, to, section) || !!match?.(loc.path);
@@ -144,5 +144,5 @@ export function Link({ to, section, match, onClick, ...rest }: LinkProps) {
     e.preventDefault();
     navigate(to);
   };
-  return <a {...rest} href={href(to)} onClick={handle} aria-current={current} />;
+  return <a {...rest} href={href(to)} onClick={handle} aria-current={current ?? ariaCurrent} />;
 }

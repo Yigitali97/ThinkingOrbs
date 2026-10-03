@@ -8,13 +8,17 @@ import { AgentRun } from '../../examples/AgentRun';
 import { AskFlow } from '../../examples/AskFlow';
 import { VoiceAssistant } from '../../voice-assistant/VoiceAssistant';
 import { href, Link, useLocation } from '../router';
+import { Prop } from '../docs';
 import { COMPONENTS, ExampleMeta, EXAMPLES, SITE_LINKS } from '../routes';
 import { CodeBlock } from '../ui';
+import { PropsTable } from './Components';
 
 const slugFor = (name: string) => COMPONENTS.find((c) => c.name === name)?.slug;
 
 interface Detail {
   render: () => ReactNode;
+  /** the example component's own props, when it has any */
+  props?: Prop[];
   /** space kept for the example before it mounts, so the page doesn't jump */
   height: number;
   folder: string;
@@ -25,6 +29,14 @@ interface Detail {
 const DETAILS: Record<string, Detail> = {
   'chat-app': {
     render: () => <ChatApp />,
+    props: [
+      {
+        name: 'agent',
+        type: '(input, emit, signal) => Promise<void>',
+        def: 'demo agent',
+        about: 'Your model. input is { text, attachments }; call emit(event) as it works; signal aborts when the user stops the reply.',
+      },
+    ],
     height: 780,
     folder: 'demo/chat-app/',
     code: `// Copy demo/chat-app/, then map your model's stream onto agent events
@@ -47,6 +59,14 @@ const DETAILS: Record<string, Detail> = {
   },
   'voice-assistant': {
     render: () => <VoiceAssistant />,
+    props: [
+      {
+        name: 'respond',
+        type: '(text, signal) => Promise<Reply>',
+        def: 'local demo brain',
+        about: 'Your model. Return the reply text, or { text, end: true } to end the conversation after speaking.',
+      },
+    ],
     height: 620,
     folder: 'demo/voice-assistant/',
     code: `// Copy demo/voice-assistant/, then plug in your model
@@ -138,12 +158,21 @@ function ExampleSection({ meta }: { meta: ExampleMeta }) {
 
       <MountWhenNear height={d.height}>{d.render()}</MountWhenNear>
 
-      <div className="example-detail">
-        <div>
-          <h3>Use it in your app</h3>
+      <details className="disclosure">
+        <summary>
+          <svg className="disclosure-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {d.props ? 'Usage and props' : 'Usage'}
+        </summary>
+        <div className="disclosure-body">
           <CodeBlock code={d.code} title={d.folder} />
-        </div>
-        <div>
+          {d.props && (
+            <>
+              <h3 id={`${meta.slug}-props`}>Props</h3>
+              <PropsTable props={d.props} labelledBy={`${meta.slug}-props`} />
+            </>
+          )}
           <h3>Good to know</h3>
           <ul className="notes">
             {d.notes.map((n) => (
@@ -151,13 +180,76 @@ function ExampleSection({ meta }: { meta: ExampleMeta }) {
             ))}
           </ul>
         </div>
-      </div>
+      </details>
     </section>
+  );
+}
+
+/** The example whose section is at the top of the screen (or the last one, at the bottom of the page). */
+function useActiveSection(ids: string[]) {
+  const [active, setActive] = useState(ids[0]);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      let current = ids[0];
+      if (atBottom) current = ids[ids.length - 1];
+      else
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.35) current = id;
+        }
+      setActive(current);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [ids]);
+  return active;
+}
+
+const IDS = EXAMPLES.map((e) => e.slug);
+
+function Sidebar({ active }: { active: string }) {
+  const nav = useRef<HTMLElement>(null);
+  // on phones the list scrolls sideways: keep the active example in view
+  useEffect(() => {
+    const list = nav.current;
+    const link = list?.querySelector<HTMLElement>(`a[href$="#${active}"]`);
+    if (!list || !link || list.scrollWidth <= list.clientWidth) return;
+    const left = link.offsetLeft - list.offsetLeft - 16;
+    list.scrollTo({ left, behavior: 'smooth' });
+  }, [active]);
+  return (
+    <nav ref={nav} className="sidebar sidebar-examples" aria-label="Examples">
+      <div className="sidebar-group">
+        <h2>Examples</h2>
+        <ul>
+          {EXAMPLES.map((e) => (
+            <li key={e.slug}>
+              <Link to={`/examples#${e.slug}`} style={{ '--tint': e.tint } as CSSProperties} aria-current={e.slug === active ? 'location' : undefined}>
+                {e.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </nav>
   );
 }
 
 export function ExamplesPage() {
   const { hash } = useLocation();
+  const active = useActiveSection(IDS);
   // this page loads after the router has tried to scroll, so honour #anchors here too
   useLayoutEffect(() => {
     if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
@@ -165,35 +257,31 @@ export function ExamplesPage() {
   }, []);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <h1>Examples</h1>
-        <p className="lede">Complete samples built from the orbs. Each one lives in its own folder under demo/, so you can copy it and plug in your model.</p>
-        <nav className="toc" aria-label="Examples on this page">
-          {EXAMPLES.map((e) => (
-            <Link key={e.slug} to={`/examples#${e.slug}`} style={{ '--tint': e.tint } as CSSProperties}>
-              {e.name}
-            </Link>
-          ))}
-        </nav>
-      </header>
-      {EXAMPLES.map((e) => (
-        <ExampleSection key={e.slug} meta={e} />
-      ))}
-      <section className="sites" aria-labelledby="full-sites-title">
-        <h2 id="full-sites-title">Full sites</h2>
-        <p>Whole products built on the orbs. They open as their own site, outside these docs.</p>
-        <ul className="site-cards">
-          {SITE_LINKS.map((l) => (
-            <li key={l.name}>
-              <a className="site-card" href={href(l.href)} style={{ '--tint': l.tint } as CSSProperties}>
-                <strong>{l.name}</strong>
-                <span>{l.summary}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
+    <div className="page page-docs page-examples">
+      <Sidebar active={active} />
+      <div className="doc">
+        <header className="page-head">
+          <h1>Examples</h1>
+          <p className="lede">Complete samples built from the orbs. Each one lives in its own folder under demo/, so you can copy it and plug in your model.</p>
+        </header>
+        {EXAMPLES.map((e) => (
+          <ExampleSection key={e.slug} meta={e} />
+        ))}
+        <section className="sites" aria-labelledby="full-sites-title">
+          <h2 id="full-sites-title">Full sites</h2>
+          <p>Whole products built on the orbs. They open as their own site, outside these docs.</p>
+          <ul className="site-cards">
+            {SITE_LINKS.map((l) => (
+              <li key={l.name}>
+                <a className="site-card" href={href(l.href)} style={{ '--tint': l.tint } as CSSProperties}>
+                  <strong>{l.name}</strong>
+                  <span>{l.summary}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }

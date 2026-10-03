@@ -144,9 +144,52 @@ test('examples start only when you scroll to them', async ({ page }) => {
   const mounted = (slug: string) => page.locator(`#${slug} .example-live`);
   await expect(mounted('chat-app')).toHaveAttribute('data-mounted', 'yes');
   await expect(mounted('ask-flow')).toHaveAttribute('data-mounted', 'no');
-  await page.getByRole('navigation', { name: 'Examples on this page' }).getByRole('link', { name: 'Ask and answer' }).click();
+  await page.getByRole('navigation', { name: 'Examples' }).getByRole('link', { name: 'Ask and answer' }).click();
   await expect(page).toHaveURL(/\/examples#ask-flow$/);
   await expect(page.locator('#ask-flow')).toBeInViewport();
   await expect(mounted('ask-flow')).toHaveAttribute('data-mounted', 'yes');
   await expect(page.locator('#ask-flow').getByRole('textbox', { name: 'Ask anything...' })).toBeVisible();
+});
+
+test('the examples sidebar highlights the example on screen as you scroll', async ({ page }) => {
+  await page.goto('/examples');
+  const sidebar = page.getByRole('navigation', { name: 'Examples' });
+  const current = sidebar.locator('a[aria-current="location"]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toHaveText('Chat app');
+  for (const [slug, name] of [
+    ['voice-assistant', 'Voice assistant'],
+    ['agent-run', 'Agent run'],
+    ['ask-flow', 'Ask and answer'],
+  ]) {
+    await page.locator(`#${slug} h2`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await expect(current).toHaveText(name);
+    await expect(sidebar.getByRole('link', { name })).toBeInViewport(); // pinned on phones too
+  }
+  // …and back up again
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(current).toHaveText('Chat app');
+  await expect(sidebar.getByRole('link', { name: 'Chat app' })).not.toHaveAttribute('aria-current', 'page');
+});
+
+test('each example keeps its usage, props and notes folded until asked', async ({ page }) => {
+  await page.goto('/examples');
+  for (const [slug, label] of [
+    ['chat-app', 'Usage and props'],
+    ['voice-assistant', 'Usage and props'],
+    ['agent-run', 'Usage'],
+    ['ask-flow', 'Usage'],
+  ]) {
+    const section = page.locator(`#${slug}`);
+    const summary = section.locator('summary');
+    await expect(summary).toHaveText(label);
+    await expect(section.locator('.codeblock')).toBeHidden();
+    await summary.click();
+    await expect(section.locator('details')).toHaveAttribute('open', '');
+    await expect(section.locator('.codeblock')).toBeVisible();
+    await expect(section.locator('.notes li').first()).toBeVisible();
+    await expect(section.locator('.table-props')).toHaveCount(label === 'Usage and props' ? 1 : 0);
+    await summary.press('Enter'); // keyboard closes it again
+    await expect(section.locator('.codeblock')).toBeHidden();
+  }
 });

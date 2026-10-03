@@ -461,7 +461,7 @@ The demo is a small site with three sections:
 | Page | URL | |
 |---|---|---|
 | Components | `/` (the first orb), `/components/<name>` | one page per orb: a demo with every state, usage, a states table, props, ref methods and notes |
-| Examples | `/examples` | all four examples on one page (the chat app, the voice assistant, an agent run and an ask-and-answer flow), each starting when you scroll to it; `/examples#agent-run` links straight to one |
+| Examples | `/examples` | all four examples in one scrolling list (the chat app, the voice assistant, an agent run and an ask-and-answer flow), each starting when you scroll to it. The sidebar highlights the one on screen, each example's usage, props and notes fold away under it, and `/examples#agent-run` links straight to one |
 | Playground | `/playground?orb=<name>` | every option of every orb; the URL keeps the setup, so it can be shared |
 
 The demos also let you try your own image, video or file; those stay in the browser and are never uploaded.
