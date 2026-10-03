@@ -1,5 +1,5 @@
 // What the Hermes pages share: reading a company tool as the signed-in user through the assistant's own policy,
-// loading a page's data once per user, a loading placeholder, and the few number and date formats the pages print.
+// loading a page's data once per user, a loading (or failed) placeholder, and the few number and date formats the pages print.
 
 import { useEffect, useState } from 'react';
 import { useAssistant } from '../../assistant/AssistantProvider';
@@ -20,27 +20,37 @@ export async function read<O>(user: User, toolId: string, input: unknown = {}): 
   return r.ok ? { data: r.data, restricted: r.restricted } : null;
 }
 
+/** How a load ended: with its data, or failed. */
+export type LoadOutcome<T> = { data: T; failed: false } | { data?: undefined; failed: true };
+
+/** Runs `load` and reports how it ended, unless the returned cancel function was called first. A throw counts as a failure. */
+export function trackLoad<T>(load: () => Promise<T>, report: (outcome: LoadOutcome<T>) => void): () => void {
+  let live = true;
+  new Promise<T>((resolve) => resolve(load())).then(
+    (data) => live && report({ data, failed: false }),
+    () => live && report({ failed: true }),
+  );
+  return () => {
+    live = false;
+  };
+}
+
 /**
- * Runs `load` for the signed-in user at `hermesNow()` and returns what it resolved to, or undefined while it runs.
- * It loads again when the user or `key` changes, and a result for an earlier user is never shown.
+ * Runs `load` for the signed-in user at `hermesNow()` and returns what it resolved to (undefined while it runs), and whether
+ * it failed. It loads again when the user or `key` changes, and a result for an earlier user is never shown.
  */
-export function usePageData<T>(load: (user: User, now: Date) => Promise<T>, key = ''): T | undefined {
+export function usePageData<T>(load: (user: User, now: Date) => Promise<T>, key = ''): [data: T | undefined, failed: boolean] {
   const { user } = useAssistant();
   const id = `${user?.id ?? ''}|${key}`;
-  const [state, setState] = useState<{ id: string; data: T } | null>(null);
+  const [state, setState] = useState<{ id: string; outcome: LoadOutcome<T> } | null>(null);
   useEffect(() => {
     if (!user) return;
-    let live = true;
-    void load(user, hermesNow()).then((data) => {
-      if (live) setState({ id, data });
-    });
-    return () => {
-      live = false;
-    };
+    return trackLoad(() => load(user, hermesNow()), (outcome) => setState({ id, outcome }));
     // `load` is a module-level function; the user and key decide when to reload
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  return state?.id === id ? state.data : undefined;
+  const outcome = state?.id === id ? state.outcome : undefined;
+  return [outcome?.data, outcome?.failed ?? false];
 }
 
 const ONE_DECIMAL = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
@@ -61,11 +71,11 @@ export function listOf(items: string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-/** What a page section shows for the moment its data is loading; `size` reserves the room the content will take. */
-export function Loading({ size = 'block' }: { size?: 'block' | 'table' }) {
+/** What a page section shows while its data is loading, or if loading failed; `size` reserves the room the content will take. */
+export function Loading({ size = 'block', failed = false }: { size?: 'block' | 'table'; failed?: boolean }) {
   return (
-    <p className="loading" data-size={size} role="status">
-      Loading…
+    <p className={failed ? 'note' : 'loading'} data-size={failed ? undefined : size} role="status">
+      {failed ? 'This can’t be shown right now.' : 'Loading…'}
     </p>
   );
 }

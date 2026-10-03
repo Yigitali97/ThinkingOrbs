@@ -65,7 +65,7 @@ async function loadTeam(user: User, now: Date): Promise<TeamData> {
 
 export function Team() {
   usePageContext({ page: 'team', title: 'Team' });
-  const data = usePageData(loadTeam);
+  const [data, broken] = usePageData(loadTeam);
 
   return (
     <div className="page as">
@@ -74,9 +74,9 @@ export function Team() {
         Hours logged since Monday against each person’s capacity so far: their weekly hours, pro-rated to the working time gone.
         Over is more than 110% of it, under is less than 70%.
       </p>
-      <div className="page-section" aria-busy={!data}>
+      <div className="page-section" aria-busy={!data && !broken}>
         {!data ? (
-          <Loading size="table" />
+          <Loading size="table" failed={broken} />
         ) : data.failed ? (
           <p className="note">The directory or Clockify didn’t respond, so hours can’t be shown right now.</p>
         ) : (

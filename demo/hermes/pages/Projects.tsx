@@ -34,7 +34,7 @@ async function loadProjects(user: User, now: Date): Promise<ProjectsData> {
 export function Projects() {
   const { user } = useAssistant();
   usePageContext({ page: 'projects', title: 'Projects' });
-  const data = usePageData(loadProjects);
+  const [data, broken] = usePageData(loadProjects);
   const onTrack = data?.cards.filter((c) => c.status === 'on-track').length ?? 0;
 
   return (
@@ -43,7 +43,7 @@ export function Projects() {
       <p className="lede">
         On track, at risk or off track, from sprint velocity against the target date, blocked tickets and pull requests waiting for review.
       </p>
-      <section className="page-section" aria-busy={!data}>
+      <section className="page-section" aria-busy={!data && !broken}>
         <div className="section-head">
           <h2>{user?.role === 'developer' ? 'Your team’s projects' : 'All projects'}</h2>
           {data && !data.failed && (
@@ -53,7 +53,7 @@ export function Projects() {
           )}
         </div>
         {!data ? (
-          <Loading />
+          <Loading failed={broken} />
         ) : data.failed ? (
           <p className="note">Jira or GitHub didn’t respond, so project status can’t be shown right now.</p>
         ) : (

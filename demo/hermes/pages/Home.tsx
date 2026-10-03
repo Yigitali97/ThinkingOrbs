@@ -67,7 +67,7 @@ function greeting(now: Date): string {
 export function Home() {
   const { user, snapshot, conversation } = useAssistant();
   usePageContext({ page: 'home', title: 'Home' });
-  const glance = usePageData(loadGlance);
+  const [glance, broken] = usePageData(loadGlance);
   const hasTurns = snapshot.turns.length > 0;
 
   return (
@@ -76,12 +76,12 @@ export function Home() {
         {greeting(hermesNow())}, {firstName(user)}
       </h1>
 
-      <section className="home-glance" aria-labelledby="home-glance" aria-busy={!glance}>
+      <section className="home-glance" aria-labelledby="home-glance" aria-busy={!glance && !broken}>
         <div className="section-head">
           <h2 id="home-glance">Today at a glance</h2>
           {glance && <p className="section-note">{glance.scope}</p>}
         </div>
-        {glance ? <Stat items={glance.items} /> : <Loading />}
+        {glance ? <Stat items={glance.items} /> : <Loading failed={broken} />}
       </section>
 
       <section className="home-ask" aria-labelledby="home-ask">

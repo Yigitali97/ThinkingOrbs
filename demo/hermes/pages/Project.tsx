@@ -206,14 +206,14 @@ function Sections({ data }: { data: ProjectData }) {
 export function Project({ id }: { id: string }) {
   const name = HERMES_PROJECTS.find((p) => p.id === id)?.name ?? id;
   usePageContext({ page: 'project', id, title: name });
-  const data = usePageData((user, now) => loadProject(id, user, now), id);
+  const [data, broken] = usePageData((user, now) => loadProject(id, user, now), id);
 
   return (
     <div className="page as">
       <h1>{name}</h1>
-      <div className="project-status" aria-busy={data === undefined}>
+      <div className="project-status" aria-busy={data === undefined && !broken}>
         {data === undefined ? (
-          <Loading />
+          <Loading failed={broken} />
         ) : data === null ? (
           <p className="note">The directory didn’t respond, so this project can’t be shown right now.</p>
         ) : (
