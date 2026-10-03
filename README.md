@@ -537,7 +537,7 @@ The demo's sample images and video frames are drawn in code (`demo/samples.ts`),
 
 ### Deploying the site
 
-`npm run build` writes a static site to `dist/`, with one HTML file per page (each with its own title and description) and a `404.html`, so every URL works on any static host without rewrite rules. To serve it from a sub-path, such as GitHub Pages at `/ThinkingOrbs/`, set the base path when building:
+`npm run build` writes a static site to `dist/`, with one HTML file per page (each with its own title and description) and a `404.html` that starts the right site for the address (Hermes under `/hermes/`, the docs anywhere else), so every URL works on any static host without rewrite rules. To serve it from a sub-path, such as GitHub Pages at `/ThinkingOrbs/`, set the base path when building:
 
 ```bash
 BASE_PATH=/ThinkingOrbs/ npm run build
@@ -559,7 +559,7 @@ Then open http://localhost:5318/hermes/. You are asked to sign in as one of thre
 | Daniel Okafor, Engineering Manager | Manager | all projects, individual hours for his own team (Platform) and team totals for the others; no AWS costs |
 | Sara Lindqvist, Developer | Developer | her team's projects, her own hours and her team's total; no one else's hours, no AWS costs |
 
-When a question reaches something a role may not see, Hermes says what is held back and offers what it can show instead. Try "How many hours did developers work this week?" as each user.
+When a question reaches something a role may not see, Hermes says what is held back and offers what it can show instead. Try "How many hours did developers work this week?" or "How many hours did Leo work this week?" as each user.
 
 The site is built in three layers, each knowing nothing about the one above it:
 
@@ -571,18 +571,16 @@ The site is built in three layers, each knowing nothing about the one above it:
 
 The shell never imports from `demo/hermes/`, so it is site-agnostic: a second agent with its own tools and scope, such as a fleet-management assistant, can reuse it by supplying another `AgentDefinition`.
 
-**Plugging in real systems.** The brain, tools, policy and sign-in sit behind interfaces in `demo/assistant/protocol.ts`, so replacing them does not change the UI:
+**Plugging in real systems.** The brain, tools and policy sit behind interfaces in `demo/assistant/protocol.ts`, and sign-in behind `demo/hermes/auth.ts`, so replacing them does not change the UI:
 
 - **Model.** Replace the `brain` (the `Brain` type) with one that calls your server, which calls a real model with the agent's tools as tool definitions and streams `AssistantEvent`s back.
 - **Connectors.** Implement `Tool.run` on a server for AWS, Jira, Microsoft Graph (Teams), Clockify and GitHub, keeping the same tool ids and output shapes.
-- **Policy.** Enforce the role rules (`Policy.before` and `Policy.after`) on the server, on the same tool calls. The list of tools given to an agent is its permission boundary.
+- **Policy.** Enforce the role rules (`Policy.before` and `Policy.after`) on the server, on the same tool calls. The list of tools given to an agent is its permission boundary. `Policy` is synchronous because the demo's tools run in the browser, so a server-side policy needs an adapter: apply it where the tools run, and have the browser's tool calls return what the server already narrowed.
 - **Identity.** Put a real identity provider behind `demo/hermes/auth.ts`, and take each user's role from your directory.
 
 The design is in `docs/superpowers/specs/2026-10-03-ai-native-sites-design.md` (section 9 covers this).
 
-**What this demo is not.** Every number, person, ticket and message is generated in the browser from a fixed seed, so nothing leaves it and it works offline with no API key. The brain matches questions to a fixed set of intents rather than calling a model. Hermes is read-only: it never writes to any system, and its drafts are labelled "Demo — not sent". Sign-in is a picker for the three demo users, not real authentication.
-
----
+**What this demo is not.** Every number, person, ticket and message is generated in the browser from a fixed seed, so nothing leaves it and it works offline with no API key. The brain matches questions to a fixed set of intents rather than calling a model. Hermes is read-only: it never writes to any system, and its drafts are labelled "Demo — not sent". Sign-in is a picker for the three demo users, not real authentication. The role policy runs in the browser over data that is already there, and a team total over a narrow window can come close to one person's hours; both are closed by running the policy on the server, as above.
 
 ---
 
