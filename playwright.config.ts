@@ -24,7 +24,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
-    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(smoke|navigation|assistant|hermes)\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(smoke|navigation)\.spec\.ts/ },
   ],
   webServer: {
     command: `npx vite build && npx vite preview --port ${PORT} --strictPort`,

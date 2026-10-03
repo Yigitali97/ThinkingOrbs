@@ -144,12 +144,3 @@ test.describe('Ask and answer', () => {
     await expect(page.locator('.ao-text')).toHaveText('The search service did not respond. Try again in a moment.');
   });
 });
-
-test.describe('Full sites', () => {
-  test('the Hermes card leaves the docs and, signed out, lands on sign-in', async ({ page }) => {
-    await page.goto('/examples');
-    await expect(page.getByRole('heading', { name: 'Full sites' })).toBeVisible();
-    await page.getByRole('link', { name: 'Hermes' }).click();
-    await expect(page).toHaveURL(/\/hermes\/sign-in\?next=%2Fhermes$/);
-  });
-});

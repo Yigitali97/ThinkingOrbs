@@ -75,16 +75,6 @@ export const EXAMPLES: ExampleMeta[] = [
   },
 ];
 
-/** Whole sites built on the orbs. They are separate apps, so they are linked, not routed to. */
-export const SITE_LINKS: { name: string; summary: string; href: '/hermes/'; tint: string }[] = [
-  {
-    name: 'Hermes',
-    summary: 'An internal company portal whose AI assistant is on every page, answers with tables, charts and drafts, and shows each person only what their role allows.',
-    href: '/hermes/',
-    tint: '#7c9cff',
-  },
-];
-
 export interface PageMeta {
   title: string;
   description: string;
