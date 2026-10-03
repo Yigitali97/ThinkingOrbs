@@ -99,19 +99,26 @@ export function useLocation(): Location {
   return useSyncExternalStore(subscribe, read, read);
 }
 
-/** Apply the scroll that the last navigation asked for, after the new page has rendered. */
-export function useScrollManagement(loc: Location) {
+/**
+ * Apply the scroll that the last navigation asked for, after the new page has rendered.
+ * `anchor` is the id of the section the path itself points at: arriving there lands on it instead of the top.
+ */
+export function useScrollManagement(loc: Location, anchor?: string) {
   useLayoutEffect(() => {
     const p = pendingScroll;
     pendingScroll = null;
-    if (!p && !loc.hash) return;
-    if (p?.kind === 'top') window.scrollTo(0, 0);
-    else if (p?.kind === 'restore') window.scrollTo(0, p.y);
-    else if (loc.hash) {
-      const el = document.getElementById(decodeURIComponent(loc.hash.slice(1)));
-      if (el) el.scrollIntoView();
-      else if (p?.kind === 'hash') window.scrollTo(0, 0);
+    const id = loc.hash ? decodeURIComponent(loc.hash.slice(1)) : anchor;
+    if (p?.kind === 'restore') {
+      window.scrollTo(0, p.y);
+      return;
     }
+    if (!p && !id) return;
+    const el = id ? document.getElementById(id) : null;
+    // a link into a folded panel opens it
+    const folded = el?.closest('details');
+    if (folded) folded.open = true;
+    if (el) el.scrollIntoView();
+    else if (p) window.scrollTo(0, 0);
   }, [loc.path, loc.hash]);
 }
 

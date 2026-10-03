@@ -49,5 +49,5 @@ test('unknown pages show the not-found page', async ({ page }) => {
   await expect(page).toHaveTitle(/Page not found/);
   await page.getByRole('link', { name: 'Browse components' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('h1')).toHaveText('AssistantOrb');
+  await expect(page.locator('h1')).toHaveText('Components');
 });

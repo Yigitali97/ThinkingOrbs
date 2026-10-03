@@ -6,10 +6,10 @@ import { expect, test } from './fixtures';
 
 test('the site opens on the components, and nav links change pages without a reload', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1')).toHaveText(COMPONENTS[0].name);
+  await expect(page.locator('h1')).toHaveText('Components');
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: 'Components' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('navigation', { name: 'Components' }).getByRole('link', { name: COMPONENTS[0].name })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Components' }).getByRole('link', { name: COMPONENTS[0].name })).toHaveAttribute('aria-current', 'location');
   await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
 
   for (const [name, path, title] of [
@@ -27,36 +27,45 @@ test('the site opens on the components, and nav links change pages without a rel
 
   await nav.getByRole('link', { name: 'Examples' }).click();
   await page.getByRole('link', { name: 'ThinkingOrbs home' }).click();
-  await expect(page.locator('h1')).toHaveText(COMPONENTS[0].name);
+  await expect(page.locator('h1')).toHaveText('Components');
 });
 
-test('a component page marks its section, and prev/next walk through every component', async ({ page }) => {
+test('the components sidebar jumps to each component and highlights the one on screen', async ({ page }) => {
   await page.goto(`/components/${COMPONENTS[0].slug}`);
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Components' })).toHaveAttribute('aria-current', 'true');
-  for (let i = 1; i < COMPONENTS.length; i++) {
-    await page.getByRole('navigation', { name: 'More components' }).getByRole('link', { name: new RegExp(`Next\\s*${COMPONENTS[i].name}`) }).click();
-    await expect(page.locator('h1')).toHaveText(COMPONENTS[i].name);
-    expect(await page.evaluate(() => window.scrollY), 'new page starts at the top').toBe(0);
+  const sidebar = page.getByRole('navigation', { name: 'Components' });
+  const current = sidebar.locator('a[aria-current="location"]');
+  for (const c of COMPONENTS.slice(1)) {
+    await sidebar.getByRole('link', { name: c.name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/components#${c.slug}$`));
+    await expect(page.locator(`#${c.slug} h2`)).toBeInViewport();
+    await expect(current).toHaveText(c.name);
+    await expect(sidebar.getByRole('link', { name: c.name, exact: true })).toBeInViewport(); // pinned on phones too
   }
-  await expect(page.getByRole('navigation', { name: 'More components' }).getByRole('link', { name: /Next/ })).toHaveCount(0);
+  // …and back up again by scrolling
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(current).toHaveText(COMPONENTS[0].name);
+  await expect(page.locator('h1')).toHaveText('Components');
 });
 
 test('back and forward restore pages and scroll positions', async ({ page }) => {
   await page.goto('/components/tool-orb');
-  const next = page.getByRole('navigation', { name: 'More components' }).getByRole('link', { name: /Next/ });
-  await next.scrollIntoViewIfNeeded();
+  const playground = page.locator('#tool-orb').getByRole('link', { name: 'Try every option in the playground' });
+  await playground.scrollIntoViewIfNeeded();
   const y = await page.evaluate(() => window.scrollY);
   expect(y).toBeGreaterThan(500);
-  await next.click();
-  await expect(page.locator('h1')).toHaveText('AskOrb');
+  await playground.click();
+  await expect(page.locator('h1')).toHaveText('Playground');
   expect(await page.evaluate(() => window.scrollY), 'new page starts at the top').toBe(0);
 
   await page.goBack();
-  await expect(page.locator('h1')).toHaveText('ToolOrb');
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(y - 40);
+  await expect(page.locator('h1')).toHaveText('Components');
+  // demos above remount as you return, so the position is close rather than exact
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(y - 300);
+  await expect(page.locator('#tool-orb')).toBeInViewport();
 
   await page.goForward();
-  await expect(page.locator('h1')).toHaveText('AskOrb');
+  await expect(page.locator('h1')).toHaveText('Playground');
 });
 
 test('modifier clicks are left to the browser', async ({ page, context, isMobile }) => {
@@ -75,15 +84,16 @@ test('deep links load straight into the page, with a trailing slash too', async 
   await page.goto('/examples/');
   await expect(page.locator('h1')).toHaveText('Examples');
   await page.goto('/components/reel-orb/');
-  await expect(page.locator('h1')).toHaveText('ReelOrb');
-  await page.goto('/components/#props');
-  await expect(page.locator('h1')).toHaveText(COMPONENTS[0].name);
-  await expect(page.locator('#props')).toBeInViewport();
+  await expect(page.locator('h1')).toHaveText('Components');
+  await expect(page.locator('#reel-orb h2')).toBeInViewport();
+  await page.goto('/components/#search-orb');
+  await expect(page.locator('#search-orb h2')).toBeInViewport();
 });
 
-test('anchor links scroll to the section', async ({ page }) => {
-  await page.goto('/components/search-orb#props');
-  await expect(page.locator('#props')).toBeInViewport();
+test('anchor links scroll to the section, opening it when it is folded', async ({ page }) => {
+  await page.goto('/components#search-orb-props');
+  await expect(page.locator('#search-orb details')).toHaveAttribute('open', '');
+  await expect(page.locator('#search-orb-props')).toBeInViewport();
 });
 
 test('skip link jumps to the content', async ({ page }) => {
@@ -114,29 +124,34 @@ test('animation loops stop when orbs leave the page', async ({ page }) => {
     await page.waitForTimeout(1500);
     return page.evaluate(() => (window as unknown as { rafFns: Set<unknown> }).rafFns.size);
   };
-  // StatusOrb's page: its seventeen StatusOrbs and the header's share a single loop
-  const toStatusOrb = async () => {
-    await page.getByRole('navigation', { name: 'Components' }).getByRole('link', { name: 'StatusOrb' }).click();
-    await expect(page.locator('h1')).toHaveText('StatusOrb');
-  };
+  const sidebar = page.getByRole('navigation', { name: 'Components' });
 
+  // the top of the components page runs the demos near the screen, and nothing else
+  await page.goto('/');
+  await expect(page.locator(`#${COMPONENTS[0].slug} .doc-demo`)).toHaveAttribute('data-mounted', 'yes');
+  const atTop = await loops();
+  expect(atTop, 'only the demos near the screen run').toBeLessThan(COMPONENTS.length / 2);
+
+  // pass every component, then come back: the demos left behind have stopped
+  for (const c of COMPONENTS) {
+    await sidebar.getByRole('link', { name: c.name, exact: true }).click();
+    await expect(page.locator(`#${c.slug} .doc-demo`)).toHaveAttribute('data-mounted', 'yes');
+    await page.waitForTimeout(250);
+  }
+  await expect(page.locator(`#${COMPONENTS[0].slug} .doc-demo`)).toHaveAttribute('data-mounted', 'no');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.locator(`#${COMPONENTS[COMPONENTS.length - 1].slug} .doc-demo`)).toHaveAttribute('data-mounted', 'no');
+  await expect.poll(loops, { message: 'loops left behind' }).toBe(atTop);
+
+  // leaving the examples stops their loops too
   await page.goto('/examples#agent-run');
   await expect(page.locator('.ar')).toBeVisible();
   const busy = await loops();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Components' }).click();
-  await toStatusOrb();
-  const quiet = await loops();
-  expect(busy, 'the examples run their own loops').toBeGreaterThan(quiet);
-  expect(quiet, 'only the shared StatusOrb loop is left').toBe(1);
-
-  // visit every component page in the app, then come back: nothing keeps running
-  for (const c of COMPONENTS) {
-    await page.getByRole('navigation', { name: 'Components' }).getByRole('link', { name: c.name, exact: true }).click();
-    await expect(page.locator('h1')).toHaveText(c.name);
-    await page.waitForTimeout(250);
-  }
-  await toStatusOrb();
-  expect(await loops(), 'loops left behind').toBe(1);
+  await expect(page.locator('h1')).toHaveText('Components');
+  expect(busy, 'the examples run their own loops').toBeGreaterThan(0);
+  // (a page's last frames can still be winding down just after it leaves)
+  await expect.poll(loops, { message: 'only the components page loops are left' }).toBe(atTop);
 });
 
 test('examples start only when you scroll to them', async ({ page }) => {
