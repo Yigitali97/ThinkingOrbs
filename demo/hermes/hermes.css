@@ -111,12 +111,21 @@ button { font: inherit; color: inherit; }
   border-radius: 2px; background: var(--accent);
 }
 
-/* narrow screens: brand and account share the first row, the nav takes the second */
+/* narrower screens: brand, Ask and account share the first row, the nav takes the second */
+@media (max-width: 860px) {
+  .brand { order: 1; flex: 1; }
+  .as-askbar { order: 2; }
+  .user-menu { order: 3; }
+  .topnav { order: 4; flex: 0 0 100%; margin: 0 -8px; overflow-x: auto; }
+}
 @media (max-width: 640px) {
   .topbar-inner { padding: 8px 16px; column-gap: 8px; }
-  .brand { order: 1; flex: 1; }
-  .user-menu { order: 2; }
-  .topnav { order: 3; flex: 0 0 100%; margin: 0 -8px; overflow-x: auto; }
+}
+/* up to here the Ask button is just its icon, so the nav keeps its room */
+@media (min-width: 861px) and (max-width: 1000px) {
+  .topbar .as-askbar { width: 40px; padding: 0; justify-content: center; }
+  .topbar .as-askbar-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .topbar .as-askbar-key { display: none; }
 }
 
 /* ------------------------------------------------------------- user menu */
@@ -139,6 +148,11 @@ button { font: inherit; color: inherit; }
   font-size: 11px; font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase;
 }
 .chevron { flex: none; color: var(--muted); transition: transform 0.15s; }
+
+/* the smallest phones keep brand and account on one row; the dock opens the assistant there */
+@media (max-width: 400px) {
+  .topbar .as-askbar { display: none; }
+}
 
 @media (max-width: 640px) {
   .user-button { padding-left: 10px; gap: 8px; }

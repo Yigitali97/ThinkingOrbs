@@ -1,7 +1,10 @@
 // The Hermes site: the signed-in guard, the header, the page router and the one assistant provider that lives across page changes.
 
 import { ReactNode, useEffect, useRef } from 'react';
+import { AskBar } from '../assistant/AskBar';
 import { AssistantProvider } from '../assistant/AssistantProvider';
+import { Dock } from '../assistant/Dock';
+import { Panel } from '../assistant/Panel';
 import { ErrorBoundary } from '../site/ErrorBoundary';
 import { Link, navigate, useLocation, useScrollManagement } from '../site/router';
 import { guard, useUser } from './auth';
@@ -72,6 +75,7 @@ function Header({ user }: { user: User }) {
             Connections
           </Link>
         </nav>
+        <AskBar />
         <UserMenu user={user} />
       </div>
     </header>
@@ -138,6 +142,8 @@ export function App() {
           </ErrorBoundary>
         </main>
       </div>
+      <Dock />
+      <Panel />
     </AssistantProvider>
   );
 }

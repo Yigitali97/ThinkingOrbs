@@ -42,6 +42,12 @@ export function usePageRegistry(): PageRegistry {
   return registry;
 }
 
+/** A reply that just finished, in any way but being stopped, while its answer is not on screen. Errors count, so they get noticed. */
+export function marksUnread(wasBusy: boolean, s: ConversationSnapshot, view: { open: boolean; inline: boolean }): boolean {
+  const last = s.turns[s.turns.length - 1];
+  return wasBusy && !s.busy && !!last && last.reply.state !== 'stopped' && !view.open && !view.inline;
+}
+
 const unknownPage = (): PageContext => ({ page: 'unknown', title: typeof document === 'undefined' ? '' : document.title });
 
 export function AssistantProvider({
@@ -130,13 +136,13 @@ export function AssistantProvider({
     if (el) setTimeout(() => el.isConnected && el.focus(), 0);
   }, []);
 
-  // a reply that finishes while the panel is closed and not inline leaves an unread dot
+  // a reply that finishes while the panel is closed and not inline leaves an unread dot; a new conversation starts read
   useEffect(() => {
+    setUnread(false);
     let wasBusy = conversation.getSnapshot().busy;
     return conversation.subscribe(() => {
       const s = conversation.getSnapshot();
-      const last = s.turns[s.turns.length - 1];
-      if (wasBusy && !s.busy && last?.reply.state === 'done' && !openRef.current && !inlineRef.current) setUnread(true);
+      if (marksUnread(wasBusy, s, { open: openRef.current, inline: inlineRef.current })) setUnread(true);
       wasBusy = s.busy;
     });
   }, [conversation]);
