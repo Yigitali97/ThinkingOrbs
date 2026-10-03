@@ -4,6 +4,8 @@ Date: 2026-10-03 · Status: draft for review · Branch: `ai-sites`
 
 > **Scope update (2026-10-03):** build **Hermes only** for now. The Fleet site (§3) is deferred. The shared assistant shell (§2) stays site-agnostic so Fleet can be added later as a second agent. Fleet-only requirements (success criterion 3, §3, the Fleet rows in §8) do not apply to this round.
 
+> **AI-first redesign (2026-10-03, round 2):** the first build put the assistant in a dock and side panel beside ordinary dashboard pages — dashboard first, AI second. §10 redesigns Hermes so the conversation *is* the site, an AI bot character is always on screen, and dashboards open in a canvas next to the conversation. §10 supersedes the Hermes parts of §2.2 (dock, side panel, AskBar), §4.3 (pages) and §6 (layout) where they conflict. Data, roles, policy, agent, answer blocks, voice and attachments are unchanged.
+
 ## 1. Intent
 
 Most websites are pages first, with a chatbot bolted on. These two sites are the other way round: an AI assistant is always present on every page, keeps its conversation as you move around, knows what page you are looking at, and answers in whatever form fits the question — a sentence, a table, a chart, a status card, a draft message, or a spoken reply.
@@ -326,3 +328,84 @@ fleet.html  hermes.html
 - **Tools** → real connectors (AWS SDK, Jira, Microsoft Graph for Teams, Clockify, GitHub APIs) behind the same `Tool` interface, running server-side.
 - **Policy** → enforced server-side on the same tool calls; the tool allowlist per agent becomes the permission boundary, so the Fleet agent still cannot reach company systems.
 - **Auth** → a real identity provider behind `auth.ts`; roles come from the directory.
+
+## 10. AI-first redesign (round 2)
+
+### 10.1 Intent
+
+| Said by the user | Decided in brainstorming |
+|---|---|
+| "AI first and dashboard next" — the first build "looks like a dashboard with AI implemented into it" | The conversation is the whole site. There are no dashboard pages you land on; dashboards open in a **canvas** next to the conversation, when Hermes or the user asks for one |
+| "The AI bot should be always visible on the screen as an image" (with a reference image: a friendly robot on a glowing pedestal, surrounded by capability nodes, deep indigo/violet with neon glow) | A new animated **bot character** is always on screen. It is the hero on the first screen and stays docked beside the conversation afterwards, reacting to what Hermes is doing |
+| Approved the layout mockup (left rail · conversation · canvas) and the first-screen mockup | §10.2–§10.4 |
+
+**Success criteria (in addition to §1):**
+1. Signing in lands on the conversation with the bot as the hero; no stat tiles or dashboard content on the first screen except Hermes's spoken-style morning brief.
+2. The bot is visible on every screen at every width (desktop, tablet, phone), including while the canvas is open, and its state matches what Hermes is doing (idle, listening, thinking, speaking, error).
+3. Every dashboard (Team, Projects, a project, Connections) is reachable both by asking Hermes and from the rail, and opens in the canvas without leaving the conversation.
+4. Existing deep links (`/hermes/team`, `/hermes/projects/atlas`, …) still work: they open the conversation with that dashboard in the canvas.
+5. Role visibility (§4.2) is unchanged and still enforced in the tool layer for the canvas views.
+
+### 10.2 Layout
+
+**Desktop (≥ 1024px): three regions.**
+
+```
+┌─ rail (240px, collapsible) ─┬─ conversation (flex) ────────┬─ canvas (~45%, when open) ─┐
+│ Hermes                      │                              │ Team                     ✕ │
+│ + New conversation          │  messages, full-width blocks │ (dashboard view)           │
+│ Today: past conversations   │                              │                            │
+│ Dashboards: Team, Projects, │  [bot, docked]               │                            │
+│   Connections               │  [ Ask Hermes anything  🎤 ↑]│                            │
+│ Maya Chen · CTO        ▾    │                              │                            │
+└─────────────────────────────┴──────────────────────────────┴────────────────────────────┘
+```
+
+- **Rail:** brand; `New conversation` (archives the current one); this session's conversations (from the conversation archive, newest first, the current one highlighted); a `Dashboards` list (Team, Projects, Connections) that opens the canvas; the user menu (switch demo user, sign out) at the bottom. Collapsible to an icon strip; on phones it is a slide-out drawer opened from a menu button.
+- **Conversation:** messages centered with a readable max width (~760px); answer blocks may use the full column width. The composer is centered on the first screen and pinned to the bottom once a conversation exists.
+- **Canvas:** opens beside the conversation (~45% width, min 420px) with a header (title, close). Opening a dashboard while one is open replaces it. Below 1024px the canvas opens as a full-screen sheet over the conversation with a close button; the docked bot stays visible on top of the sheet's header.
+- **Removed for Hermes:** the top navigation bar, the floating dock, the side panel, the header `Ask Hermes` button, the Home "Today at a glance" tiles and the separate full pages. (`Dock`, `Panel` and `AskBar` stay in `demo/assistant/` for other sites.)
+
+**Routing.** The conversation is always mounted. The URL selects the canvas: `/hermes` → no canvas; `/hermes/team`, `/hermes/projects`, `/hermes/projects/:id`, `/hermes/connections` → that view in the canvas. Opening/closing the canvas updates the URL (so back/forward and deep links work). Unknown paths show the conversation plus a "No page at …" canvas. Prerendered titles stay per route.
+
+**First screen (empty conversation).** The bot as hero on its glowing pedestal; around it, the **connected systems** (Directory, Clockify, Jira, GitHub, Teams, AWS) as small orbiting nodes with icons — selecting one suggests a question about that system. Below: `Good morning, <first name>`, Hermes's **morning brief** (2–3 sentences computed from the data for this role, streamed like an answer — the existing team-health and project-status logic), the wide composer, and role-aware suggestion chips.
+
+### 10.3 The bot character (new orb component)
+
+A new component in the library, `BotOrb` (`src/orbs/bot/`), following the library's conventions (canvas or SVG + CSS, `'use client'`, accessible label, `prefers-reduced-motion`, no dependencies):
+
+- **Look:** a friendly robot — rounded head with a dark visor screen showing two glowing eyes, small antenna/ear lights, a rounded body with the Hermes mark, floating above a glowing ring pedestal. Indigo/violet body tint with cyan glow, matching the reference image's style.
+- **States** (driven by the assistant, mapped from `dockState` + voice state): `idle` (gentle float, blink, eyes glance toward the pointer), `listening` (antenna lights pulse with the microphone level, sound rings), `thinking` (eyes become a loading arc, particles orbit), `speaking` (visor shows a level/waveform driven by streamed tokens or the speech level), `happy` (one bounce when an answer finishes), `error` (brief shake, eyes turn amber).
+- **Props:** `state`, `size`, `level?` (0–1 audio level), `stream?` (MediaStream, like AssistantOrb), `label`, `className`, `style`; ref methods `bounce()`, `blink()`.
+- **Placement:** hero (~220px) on the first screen; once a conversation exists it docks beside the composer (~88px desktop, ~56px phone) and stays visible on every screen and over the canvas sheet. Clicking it focuses the composer; in voice mode it grows and becomes the voice control.
+- **Tool activity:** while Hermes calls a tool, the matching system node lights up and connects to the bot (first screen); in the docked state, a compact line names the systems being read.
+- Added to the docs site's component list and README like the other orbs.
+
+### 10.4 Visual direction
+
+- **Mood:** the reference image — deep navy/indigo background with a subtle radial glow behind the bot, neon violet and cyan accents, glassy translucent surfaces, soft glows on the bot, pedestal and active nodes. Text surfaces stay calm and highly legible; glow is reserved for the bot, the pedestal, active nodes, focus and the send button.
+- **Theme:** Hermes is **dark-only** (like the docs site), designed for that palette; `color-scheme: dark`. Contrast still meets WCAG AA.
+- **Type:** display font (Bricolage, already shipped) for the greeting and headings; system sans for interface text; system serif for Hermes's answer prose (the "voice"). No new font packages.
+- **Answers:** no bubble for Hermes; prose with blocks set in as glass panels (hairline border, 12px radius, large numbers). User messages are subtle pills on the right. Hermes's work is one compact line that folds into the existing activity summary.
+- **Canvas views:** same language — glass header, big numbers, hairline tables — so dashboards read as "Hermes showing you something".
+- **Motion:** bot float/blink/state transitions; canvas slides in (~200ms); answers stream. Reduced motion: no float, glow pulses or slides — state changes become fades.
+
+### 10.5 Agent changes
+
+- New intent `open-dashboard`: "show me the team dashboard", "open Atlas", "show projects", "open connections" → a short answer plus an `open` action that opens the canvas (respecting visibility: a hidden project gets the existing refusal).
+- New block action: `link` blocks whose `href` is a Hermes route open in the canvas instead of navigating away; status cards' `Open <project>` links do the same.
+- `morning-brief`: a non-interactive run of the brain on sign-in / new conversation (once per conversation) that streams the brief into the first screen; it uses the same tools and policy as any question.
+- Page context becomes **canvas context**: whatever is open in the canvas is what "this one" refers to.
+
+### 10.6 Testing
+
+- Unit: `BotOrb` state mapping (assistant + voice state → bot state); `open-dashboard` intent matching and visibility; morning brief content per role (Sara's brief has no other individuals' hours).
+- Browser:
+  - first screen shows the bot hero, brief and composer, and no stat tiles;
+  - the bot is visible on every route and at 1280, 900 and 375px, including with the canvas open;
+  - bot state changes while a reply runs (thinking → speaking → idle);
+  - asking "show me the team dashboard" opens the canvas and updates the URL; closing restores `/hermes`; deep links open the canvas; back/forward work;
+  - rail: new conversation, restore a past one, open each dashboard;
+  - role checks from §8 still pass through the canvas views;
+  - axe on every route, no horizontal scroll at 375px, reduced motion.
+- Existing assistant/hermes e2e tests are rewritten for the new layout (no dock/panel in Hermes).
