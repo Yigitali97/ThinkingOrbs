@@ -24,7 +24,8 @@ test('the dock opens the panel on the composer, and Esc brings focus back', asyn
   await expect(composer(page)).toBeFocused();
   // an empty thread greets and suggests
   await expect(panel(page).getByText('Hi Maya. Ask me about the team, hours, projects, code, Teams or AWS.')).toBeVisible();
-  await expect(panel(page).getByRole('button', { name: 'How are the projects going?' })).toBeVisible();
+  // the Team page's suggestions
+  await expect(panel(page).getByRole('button', { name: 'How many hours did developers work this week?' })).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(panel(page)).toHaveCount(0);
@@ -108,8 +109,8 @@ test('a status update comes back as a draft that copies', async ({ page }) => {
 
 test('clear, expand and close from the panel header', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Hermes' }).click();
-  await panel(page).getByRole('button', { name: 'How are the projects going?' }).click();
-  await expect(panel(page).getByText('How are the projects going?')).toBeVisible();
+  await panel(page).getByRole('button', { name: 'How is the team doing?' }).click();
+  await expect(panel(page).locator('[data-turn]').getByText('How is the team doing?')).toBeVisible();
   await expect(composer(page)).toBeFocused();
 
   await panel(page).getByRole('button', { name: 'Expand' }).click();

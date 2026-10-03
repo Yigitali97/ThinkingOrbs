@@ -10,10 +10,16 @@ import { Link, navigate, useLocation, useScrollManagement } from '../site/router
 import { guard, useUser } from './auth';
 import { HERMES_NAME, HERMES_ROOT } from './config';
 import { hermesAgent } from './agent/definition';
+import { Connections } from './pages/Connections';
+import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
+import { Project } from './pages/Project';
+import { Projects } from './pages/Projects';
 import { SignIn } from './pages/SignIn';
-import { HERMES_PROJECTS, hermesPageMeta } from './routes';
-import { hermesNow } from './store';
+import { Team } from './pages/Team';
+import { visibleProjectIds } from './policy';
+import { hermesPageMeta, hermesProjectId } from './routes';
+import { COMPANY, hermesNow } from './store';
 import { UserMenu } from './UserMenu';
 import type { User } from '../assistant/protocol';
 
@@ -29,23 +35,19 @@ function setDescription(content: string) {
   el.content = content;
 }
 
-// Heading-only pages until the real ones replace them.
-function Heading({ children }: { children: ReactNode }) {
-  return (
-    <div className="page">
-      <h1>{children}</h1>
-    </div>
-  );
+/** The project a path shows, when the user may see it. Another team's project is not found, the same as one that doesn't exist. */
+function visibleProject(path: string, user: User | null): string | null {
+  const id = hermesProjectId(path);
+  return id && user && visibleProjectIds(user, COMPANY).has(id) ? id : null;
 }
 
-function page(path: string): ReactNode {
-  if (path === HERMES_ROOT) return <Heading>Home</Heading>;
-  if (path === `${HERMES_ROOT}/team`) return <Heading>Team</Heading>;
-  if (path === `${HERMES_ROOT}/projects`) return <Heading>Projects</Heading>;
-  if (path === `${HERMES_ROOT}/connections`) return <Heading>Connections</Heading>;
-  const project = path.match(/^\/hermes\/projects\/([a-z-]+)$/);
-  const found = project && HERMES_PROJECTS.find((p) => p.id === project[1]);
-  if (found) return <Heading>{found.name}</Heading>;
+function page(path: string, user: User): ReactNode {
+  if (path === HERMES_ROOT) return <Home />;
+  if (path === `${HERMES_ROOT}/team`) return <Team />;
+  if (path === `${HERMES_ROOT}/projects`) return <Projects />;
+  if (path === `${HERMES_ROOT}/connections`) return <Connections />;
+  const project = visibleProject(path, user);
+  if (project) return <Project id={project} />;
   return <NotFound />;
 }
 
@@ -94,10 +96,15 @@ export function App() {
     if (redirect) navigate(redirect, { replace: true });
   }, [redirect]);
 
+  // a project the user can't see is titled as not found too; switching user can change that without a navigation
+  const hidden = hermesProjectId(loc.path) !== null && !visibleProject(loc.path, user);
   useEffect(() => {
-    const meta = hermesPageMeta(loc.path);
+    const meta = hidden ? null : hermesPageMeta(loc.path);
     document.title = meta?.title ?? `Page not found · ${HERMES_NAME}`;
     if (meta) setDescription(meta.description);
+  }, [loc.path, hidden]);
+
+  useEffect(() => {
     // after an in-app navigation, start screen readers and keyboard users at the new page
     if (first.current) first.current = false;
     else if (!loc.hash) main.current?.focus({ preventScroll: true });
@@ -137,7 +144,7 @@ export function App() {
         <main id="main" ref={main} tabIndex={-1} className="main">
           <ErrorBoundary key={loc.path}>
             <div className="route" key={loc.path}>
-              {page(loc.path)}
+              {page(loc.path, user)}
             </div>
           </ErrorBoundary>
         </main>

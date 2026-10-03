@@ -6,7 +6,7 @@ import { isActive, normalisePath, parseHref, stripBase } from './router';
 import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta } from './routes';
 import { withMeta } from '../../vite.config';
 import { COMPANY } from '../hermes/store';
-import { HERMES_PATHS, hermesPageMeta } from '../hermes/routes';
+import { HERMES_PATHS, hermesPageMeta, hermesProjectId } from '../hermes/routes';
 import * as orbs from '../../src/orbs';
 
 describe('routes', () => {
@@ -157,5 +157,13 @@ describe('Hermes routes', () => {
     expect(hermesPageMeta('/hermes/nope')).toBeNull();
     expect(hermesPageMeta('/hermes/projects/zephyr')).toBeNull();
     expect(hermesPageMeta('/nope')).toBeNull();
+  });
+
+  it('reads the project id from a project page path, and only for a project that exists', () => {
+    expect(hermesProjectId('/hermes/projects/atlas')).toBe('atlas');
+    expect(hermesProjectId('/hermes/projects/atlas/')).toBe('atlas');
+    expect(hermesProjectId('/hermes/projects/zephyr')).toBeNull();
+    expect(hermesProjectId('/hermes/projects')).toBeNull();
+    expect(hermesProjectId('/hermes/projects/atlas/extra')).toBeNull();
   });
 });

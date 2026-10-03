@@ -378,7 +378,8 @@ html[data-assistant='sheet'] body, html[data-assistant='full'] body { overflow: 
 }
 .as-linkcard:hover { border-color: var(--as-accent); color: var(--as-accent); }
 
-.as-chart { margin: 0; padding: 10px 12px 8px; border: 1px solid var(--as-line); border-radius: 12px; background: var(--as-bg); }
+/* positioned and clipped, so the screen-reader table (wider than its 1px box, as tables are) can't widen the page */
+.as-chart { position: relative; overflow: hidden; margin: 0; padding: 10px 12px 8px; border: 1px solid var(--as-line); border-radius: 12px; background: var(--as-bg); }
 .as-chart-caption { margin-bottom: 6px; font-size: 13px; font-weight: 600; }
 .as-chart-svg { display: block; width: 100%; max-width: 560px; height: auto; overflow: visible; }
 .as-chart-svg text { font-family: inherit; }

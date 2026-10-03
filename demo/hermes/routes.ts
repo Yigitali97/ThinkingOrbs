@@ -21,6 +21,15 @@ export const HERMES_PATHS: string[] = [
 ];
 
 const strip = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : path);
+const PROJECT_PREFIX = `${HERMES_ROOT}/projects/`;
+
+/** The id of the project a path shows, when it is a project page that exists; otherwise null. */
+export function hermesProjectId(rawPath: string): string | null {
+  const path = strip(rawPath);
+  if (!path.startsWith(PROJECT_PREFIX)) return null;
+  const id = path.slice(PROJECT_PREFIX.length);
+  return HERMES_PROJECTS.some((p) => p.id === id) ? id : null;
+}
 
 /** Title and description for a Hermes path, or null when no page exists there. */
 export function hermesPageMeta(rawPath: string): PageMeta | null {
@@ -42,12 +51,8 @@ export function hermesPageMeta(rawPath: string): PageMeta | null {
       title: `Connections · ${HERMES_NAME}`,
       description: 'The company systems Hermes reads from: Jira, GitHub, Teams, Clockify, the directory and AWS, and what your role may see in each.',
     };
-  const project = path.match(/^\/hermes\/projects\/([a-z-]+)$/);
-  if (project) {
-    const found = HERMES_PROJECTS.find((p) => p.id === project[1]);
-    return found
-      ? { title: `${found.name} · ${HERMES_NAME}`, description: `${found.name} at Brightline Labs: sprint progress, tickets, pull requests and hours against budget.` }
-      : null;
-  }
-  return null;
+  const found = HERMES_PROJECTS.find((p) => p.id === hermesProjectId(path));
+  return found
+    ? { title: `${found.name} · ${HERMES_NAME}`, description: `${found.name} at Brightline Labs: sprint progress, tickets, pull requests and hours against budget.` }
+    : null;
 }
