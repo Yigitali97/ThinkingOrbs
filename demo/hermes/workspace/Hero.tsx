@@ -8,7 +8,7 @@ import { briefShown } from '../../assistant/Thread';
 import { hermesNow } from '../store';
 import { firstName } from '../views/shared';
 import { useBot } from './DockedBot';
-import { PHONE_QUERY, useMedia } from './focus';
+import { PHONE_QUERY, SHORT_QUERY, useMedia } from './focus';
 import { SystemsOrbit } from './SystemsOrbit';
 
 export function greeting(now: Date): string {
@@ -20,6 +20,8 @@ export function Hero() {
   const { user, snapshot } = useAssistant();
   const bot = useBot();
   const phone = useMedia(PHONE_QUERY, false);
+  // a short window gets a smaller bot (and orbit, in the CSS), so the first screen fits without scrolling
+  const short = useMedia(SHORT_QUERY, false);
   const brief = snapshot.turns.find((t) => t.brief);
   const state = brief?.reply.state;
   const live = state === 'working' || state === 'writing';
@@ -29,7 +31,7 @@ export function Hero() {
   return (
     <div className="hero">
       <SystemsOrbit active={bot.systems}>
-        <BotOrb ref={bot.ref} size={phone ? 168 : 220} state={bot.state} stream={bot.stream} />
+        <BotOrb ref={bot.ref} size={phone ? (short ? 136 : 168) : short ? 184 : 220} state={bot.state} stream={bot.stream} />
       </SystemsOrbit>
       <h1 className="greeting">
         {greeting(hermesNow())}, {firstName(user)}

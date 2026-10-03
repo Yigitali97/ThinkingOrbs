@@ -8,9 +8,10 @@ import { useAssistant } from '../../assistant/AssistantProvider';
 import { Composer } from '../../assistant/Composer';
 import type { Turn } from '../../assistant/conversation';
 import { Suggestions, Thread } from '../../assistant/Thread';
+import { activeSystems } from '../../assistant/presence';
 import { usePageContext } from '../../assistant/usePageContext';
 import { Link } from '../../site/router';
-import { DockedBot } from './DockedBot';
+import { DockedBot, statusLine } from './DockedBot';
 import type { Overlay } from './DockedBot';
 import { PHONE_QUERY, useMedia } from './focus';
 import { Hero } from './Hero';
@@ -21,6 +22,20 @@ function HomeContext() {
   usePageContext({ page: 'home', title: 'Hermes' });
   return null;
 }
+
+/**
+ * While a reply works the docked bot and its status line show what Hermes is reading, so the thread shows no activity card;
+ * screen readers hear the same words here (the bot's line is hidden from them).
+ */
+function Working({ turn }: { turn: Turn }) {
+  const { agent } = useAssistant();
+  return (
+    <p className="sr-only" aria-live="polite" data-working="">
+      {statusLine(activeSystems(agent.tools, turn.reply), true)}
+    </p>
+  );
+}
+const working = (t: Turn) => <Working turn={t} />;
 
 export interface ConversationAreaProps {
   canvasOpen: boolean;
@@ -53,7 +68,7 @@ export function ConversationArea({ canvasOpen, overlay, onLeaveOverlay, offers }
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [snapshot]);
+  }, [snapshot, offers]);
 
   const offer = (t: Turn) => {
     const href = offers[t.id];
@@ -82,7 +97,7 @@ export function ConversationArea({ canvasOpen, overlay, onLeaveOverlay, offers }
           <>
             <h1 className="sr-only">Hermes</h1>
             <div className="talk-column">
-              <Thread turns={snapshot.turns} after={offer} />
+              <Thread turns={snapshot.turns} after={offer} live={working} />
             </div>
           </>
         ) : (

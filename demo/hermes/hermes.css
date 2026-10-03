@@ -260,7 +260,14 @@ button { font: inherit; color: inherit; }
 .talk[data-empty] { overflow-y: auto; }
 .talk[data-empty] .talk-scroll { flex: none; overflow: visible; margin-top: auto; padding-top: 12px; padding-bottom: 22px; }
 .talk[data-empty] .talk-dock { margin-bottom: auto; padding-bottom: max(32px, env(safe-area-inset-bottom)); }
-.talk[data-empty] .talk-column { max-width: 640px; }
+.talk[data-empty] .talk-column { max-width: 700px; }
+/* a short window: a smaller orbit (and bot, in Hero) so the hero, the composer and the chips fit without scrolling */
+@media (max-height: 760px) {
+  .orbit { width: min(100%, 540px); }
+  .talk[data-empty] .talk-scroll { padding-top: 4px; padding-bottom: 14px; }
+  .talk[data-empty] .talk-dock { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+  .hermes .talk[data-empty] .as-suggestions { margin-top: 10px; gap: 6px; }
+}
 
 /* ----------------------------------------------------------------- the hero */
 
@@ -468,9 +475,12 @@ button { font: inherit; color: inherit; }
   border-color: var(--line); border-radius: var(--radius);
   background: var(--glass-1);
 }
-.hermes .as-stat { gap: 10px; }
-.hermes .as-stat-item { padding: 14px 16px; }
-.hermes .as-stat-value { font-size: 28px; letter-spacing: -0.02em; }
+.hermes .as-stat { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+/* a figure like "408.8 / 444 h" stays on one line: it shrinks with its card instead of wrapping */
+.hermes .as-stat-item { container-type: inline-size; padding: 14px 16px; }
+.hermes .as-stat-value { font-size: clamp(17px, 12.5cqi, 28px); letter-spacing: -0.02em; white-space: nowrap; }
+/* the chart is drawn small and scaled to fit: kept to a width where its labels read at body size */
+.hermes .talk .as-chart-svg { max-width: 480px; }
 .hermes .as-table thead th { color: var(--text-2); }
 .hermes .as-draft-head { background: var(--glass-1); }
 .hermes .as-btn { border-color: var(--line-strong); background: var(--glass-2); }
@@ -520,7 +530,10 @@ button { font: inherit; color: inherit; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 650 22px/1.2 var(--display); letter-spacing: -0.02em;
 }
-.canvas-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 24px 48px; scrollbar-width: thin; }
+.canvas-body {
+  container: canvas / inline-size;
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 24px 48px; scrollbar-width: thin;
+}
 
 /* ----------------------------------------------------------------- views */
 
@@ -561,6 +574,10 @@ button { font: inherit; color: inherit; }
 .project-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; color: var(--text-2); font-size: 14px; }
 .reasons { margin: 10px 0 0; padding-left: 1.2em; color: var(--text-soft); }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; margin-top: 24px; }
+/* two columns in a narrow canvas: the third card takes the whole row rather than sitting alone in half of it */
+@container canvas (max-width: 560px) {
+  .summary-grid > .info-card:last-child:nth-child(3) { grid-column: 1 / -1; }
+}
 .info-card {
   display: flex; flex-direction: column; gap: 4px; padding: 16px 18px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--glass-1);
@@ -611,7 +628,7 @@ button { font: inherit; color: inherit; }
 .signin-main { display: flex; justify-content: center; padding: 40px 16px 56px; outline: none; }
 .route { animation: fade-in 200ms var(--ease) both; }
 .signin { width: 100%; max-width: 520px; text-align: center; }
-.signin-bot { display: flex; justify-content: center; margin-bottom: 4px; }
+.signin-bot { display: flex; justify-content: center; margin-bottom: 14px; }
 .signin h1 { margin: 0 0 10px; font: 600 clamp(32px, 6vw, 44px)/1.08 var(--display); letter-spacing: -0.03em; }
 .signin .lede { margin: 0 auto; max-width: 42ch; color: var(--text-2); font-size: 16px; line-height: 1.55; }
 .user-list { display: grid; gap: 10px; margin: 28px 0 0; padding: 0; list-style: none; text-align: left; }
@@ -653,6 +670,14 @@ button { font: inherit; color: inherit; }
   .hermes .as-send { width: 38px; height: 38px; }
   .signin-main { padding-top: 24px; }
   .user-card { gap: 12px; padding: 12px; }
+}
+
+/* a small phone: the first screen tightens so the composer and chips stay on it */
+@media (max-height: 760px) and (max-width: 640px) {
+  .orbit { gap: 8px; margin-bottom: 12px; }
+  .hero-brief-slot { font-size: 15.5px; line-height: 1.55; margin-top: 8px; }
+  .talk[data-empty] .talk-scroll { padding-bottom: 12px; }
+  .talk[data-empty] .talk-dock { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
 
 /* ----------------------------------------------------------------- motion */

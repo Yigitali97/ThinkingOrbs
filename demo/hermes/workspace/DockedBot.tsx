@@ -61,7 +61,7 @@ export function DockedBot({ overlay, onLeaveOverlay }: { overlay: Overlay; onLea
 
   return (
     <div className="docked" data-bot-host="" data-overlay={overlay ?? undefined} data-voice={voice.active || undefined}>
-      {/* the thread's own activity row is what assistive tech hears; this is the glanceable version */}
+      {/* the thread's working line says the same to assistive tech; this is the glanceable version */}
       {bot.status && (
         <p className="docked-status" aria-hidden="true">
           {bot.status}

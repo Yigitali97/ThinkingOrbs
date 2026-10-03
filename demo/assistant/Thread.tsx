@@ -1,7 +1,8 @@
 // The conversation as a list of turns: your question, the live activity row while the reply works, then the folded
 // activity summary, the streamed answer and its blocks. Only the latest answer is a live region for screen readers.
 // The agent's brief has no question and is not an answer: it shows only what it said, with no "Stopped." note, and nothing at all
-// when it said nothing. A site can add something after a turn (Hermes adds "Open <view>" there).
+// when it said nothing. A site can add something after a turn (Hermes adds "Open <view>" there), and can replace the live
+// activity row with its own (Hermes's bot says what it is reading, so its thread keeps only a line for screen readers).
 
 import type { ReactNode } from 'react';
 import { ActivityRow } from '../chat-app/ActivityRow';
@@ -54,14 +55,14 @@ function Question({ turn }: { turn: Turn }) {
   );
 }
 
-function Reply({ turn, latest }: { turn: Turn; latest: boolean }) {
+function Reply({ turn, latest, live }: { turn: Turn; latest: boolean; live?: (turn: Turn) => ReactNode }) {
   const { reply } = turn;
   const working = reply.state === 'working';
   const streaming = reply.state === 'writing';
   return (
     <div className="as-reply">
       {/* the live row only while nothing is on screen yet: once text or a block arrives it folds into the summary */}
-      {working && <ActivityRow activity={shownActivity(reply)} />}
+      {working && (live ? live(turn) : <ActivityRow activity={shownActivity(reply)} />)}
       {!working && reply.activities.length > 0 && <ActivitySummary reply={foldTools(reply)} />}
       <div className="as-answer" aria-live={latest ? 'polite' : undefined} aria-busy={latest ? working || streaming : undefined}>
         <Answer text={reply.text} tokens={reply.tokens} streaming={streaming} />
@@ -90,7 +91,15 @@ function Brief({ turn }: { turn: Turn }) {
   );
 }
 
-export function Thread({ turns, after }: { turns: Turn[]; after?: (turn: Turn) => ReactNode }) {
+export interface ThreadProps {
+  turns: Turn[];
+  /** something to show after a turn */
+  after?: (turn: Turn) => ReactNode;
+  /** what stands in for the live activity row while a reply works */
+  live?: (turn: Turn) => ReactNode;
+}
+
+export function Thread({ turns, after, live }: ThreadProps) {
   return (
     <ol className="as-thread" aria-label="Conversation">
       {turns.map((t, i) =>
@@ -99,7 +108,7 @@ export function Thread({ turns, after }: { turns: Turn[]; after?: (turn: Turn) =
         ) : (
           <li key={t.id} className="as-turn" data-turn={t.reply.state}>
             <Question turn={t} />
-            <Reply turn={t} latest={i === turns.length - 1} />
+            <Reply turn={t} latest={i === turns.length - 1} live={live} />
             {after?.(t)}
           </li>
         ),

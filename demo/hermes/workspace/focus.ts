@@ -10,6 +10,9 @@ export const WIDE_QUERY = '(min-width: 1024px)';
 /** Phones: the bot and the hero get smaller. */
 export const PHONE_QUERY = '(max-width: 640px)';
 
+/** Short windows: the hero's bot and orbit shrink so the first screen fits. Matches the `max-height` rule in hermes.css. */
+export const SHORT_QUERY = '(max-height: 760px)';
+
 /** Whether a media query matches now; `fallback` without a window (prerendering). */
 export function useMedia(query: string, fallback: boolean): boolean {
   const subscribe = useCallback(

@@ -97,9 +97,9 @@ function Sections({ data }: { data: ProjectData }) {
     <>
       <div className="summary-grid">
         <section className="info-card">
-          <h3>Sprint</h3>
+          <h3>Last sprint</h3>
           <p className="figure">
-            {lastSprint ? `Last sprint: ${lastSprint.completedPoints} / ${lastSprint.committedPoints} points` : 'No finished sprint yet'}
+            {lastSprint ? `${lastSprint.completedPoints} / ${lastSprint.committedPoints} points` : 'No finished sprint yet'}
           </p>
           {lastSprint && (
             <p className="muted">

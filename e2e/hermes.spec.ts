@@ -781,7 +781,7 @@ test('Atlas as Maya: status, blocked tickets and the budget', async ({ page }) =
   await expect(canvas(page).getByText('At risk', { exact: true })).toBeVisible();
   await expect(canvas(page).getByRole('region', { name: 'Blocked tickets' }).locator('tbody tr')).toHaveCount(3);
   await expect(canvas(page).getByRole('heading', { name: 'Budget' })).toBeVisible();
-  await expect(canvas(page).getByText(/^Last sprint: \d+ \/ \d+ points$/)).toBeVisible();
+  await expect(canvas(page).getByText(/^\d+ \/ \d+ points$/)).toBeVisible();
 });
 
 test('Atlas as Sara: no budget', async ({ page }) => {

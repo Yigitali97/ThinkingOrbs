@@ -1,6 +1,7 @@
 // The canvas: where Hermes shows a dashboard. Beside the conversation from 1024px (a labelled aside), a full-screen modal
 // sheet below that (Tab stays inside, Esc closes). A view you open takes focus; one Hermes opens (`quiet`) leaves your focus
-// where it is. Closing returns focus to whatever opened the view now showing.
+// where it is (or, if the view it replaced held focus, puts you in the message box). Closing returns focus to whatever opened
+// the view now showing.
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { KeyboardEvent, ReactNode, RefObject } from 'react';
@@ -42,6 +43,8 @@ export function Canvas({ title, view, quiet = false }: { title: string; view: Re
     if (active instanceof HTMLElement && active !== document.body && !ref.current?.contains(active)) opener.current = active;
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
     if (!quietRef.current) ref.current?.focus({ preventScroll: true });
+    // Hermes swapped the view you were in for another: what had focus is gone, so it goes to the message box, not the page
+    else if (!(active instanceof HTMLElement) || active === document.body || !active.isConnected) focusComposer();
   }, [path, wide]);
 
   // the sheet covers the conversation, so the page behind it must not scroll

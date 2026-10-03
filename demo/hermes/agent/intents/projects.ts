@@ -44,9 +44,10 @@ export async function projectResults(
   only: { projectId?: string } = {},
   known: { issues?: Issue[] | null; prs?: PullRequest[] | null } = {},
 ): Promise<ProjectResult[] | null> {
-  const issues = known.issues ?? (await a.get<Issue[]>('jira.issues', only, many('tickets')));
+  // null means the caller asked and the system didn't answer: asking again would only fail twice
+  const issues = known.issues !== undefined ? known.issues : await a.get<Issue[]>('jira.issues', only, many('tickets'));
   const sprints = await a.get<Sprint[]>('jira.sprints', only, many('sprints'));
-  const prs = known.prs ?? (await a.get<PullRequest[]>('github.pullRequests', only, many('pull requests')));
+  const prs = known.prs !== undefined ? known.prs : await a.get<PullRequest[]>('github.pullRequests', only, many('pull requests'));
   if (!issues || !sprints || !prs) return null;
   return projects.map((p) => ({ project: p, ...projectStatus(p, { issues, prs, sprints }, a.ctx.now) }));
 }
