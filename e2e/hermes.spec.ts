@@ -1,5 +1,6 @@
 // The Hermes site: demo sign-in and its guard, every page's title, the not-found page, and what each page shows per role.
 
+import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { HERMES_PATHS, hermesPageMeta } from '../demo/hermes/routes';
 import { expect, signInAs, test } from './fixtures';
@@ -190,4 +191,146 @@ test('Connections: a simulated Jira outage shows on the page and in the answer',
   await page.getByRole('button', { name: 'Open Hermes' }).click();
   await ask(page, 'How is the team doing?');
   await expect(panel(page).getByText("Jira didn't respond, so closed tickets and blockers aren't included.")).toBeVisible();
+});
+
+// ------------------------------------------------------------------ smoke, roles and switching
+
+const MANAGER_COPY = 'Individual hours outside your team are visible to leadership. Other teams are shown as totals.';
+
+// Every Hermes page: right title, one h1, no sideways scroll (at this project's viewport and at 375px), no serious axe violations.
+for (const path of HERMES_PATHS) {
+  test(`smoke ${path}`, async ({ page }) => {
+    // the sign-in page is the one page a signed-in visitor can still open
+    if (path !== '/hermes/sign-in') await signInAs(page, 'p-maya');
+    await page.goto(path);
+    await expect(page).toHaveTitle(hermesPageMeta(path)!.title);
+    const h1 = page.locator('h1:visible');
+    await expect(h1).toHaveCount(1);
+    await expect(h1).toBeVisible();
+
+    const overflow = async () => (await page.evaluate(() => document.documentElement.scrollWidth)) - (await page.evaluate(() => window.innerWidth));
+    expect(await overflow(), 'page is wider than the viewport').toBeLessThanOrEqual(0);
+
+    // measure contrast once the page's fade-in has finished
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.route')!).opacity)).toBe('1');
+    const axe = await new AxeBuilder({ page }).include('main').include('header').exclude('canvas').exclude('svg').analyze();
+    const serious = axe.violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
+    expect(serious, 'accessibility violations').toEqual([]);
+
+    // and again at exactly 375px wide, once the page has re-laid itself out
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.locator('h1:visible')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.route')!).opacity)).toBe('1');
+    expect(await overflow(), 'page is wider than 375px').toBeLessThanOrEqual(0);
+  });
+}
+
+async function openPanel(page: Page) {
+  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  await expect(composer(page)).toBeFocused();
+}
+
+// The side panel overlays the header's user menu below 1400px and the phone's sheet is modal, so close the panel first (a running reply
+// keeps going), switch user through the menu, then reopen the panel.
+async function switchTo(page: Page, from: string, to: string) {
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
+  await page.getByRole('button', { name: new RegExp(from) }).click();
+  await page.getByRole('menuitem', { name: new RegExp(`Switch demo user.*${to}`) }).click();
+  await expect(page.getByRole('button', { name: new RegExp(to) })).toBeVisible();
+  await openPanel(page);
+}
+
+test('role difference: Maya sees every developer, Sara only herself and her team total', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/team');
+  await openPanel(page);
+  await ask(page, 'How many hours did developers work this week?');
+  const table = panel(page).locator('[data-turn="done"]').last().locator('table.as-table');
+  await expect(table).toBeVisible();
+  expect(await table.locator('tbody tr').count(), 'rows for every developer').toBeGreaterThan(2);
+
+  await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+  await expect(panel(page).getByText(/^Hi Sara\./)).toBeVisible();
+  await expect(panel(page).locator('[data-turn]')).toHaveCount(0);
+
+  await ask(page, 'How many hours did developers work this week?');
+  const answer = panel(page).locator('[data-turn="done"]');
+  await expect(answer).toHaveCount(1);
+  await expect(answer.getByText(DEVELOPER_COPY, { exact: true })).toBeVisible();
+  const rows = answer.locator('table.as-table tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator('th, td').first()).toHaveText('You');
+  await expect(rows.nth(1).locator('th, td').first()).toHaveText('Platform team total');
+});
+
+test('switching user while a reply is still being written leaves an empty thread and no old answer', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/team');
+  await openPanel(page);
+  const asked = Date.now();
+  await ask(page, 'How is the team doing?');
+  // the question is in; do not wait for the reply
+  await expect(panel(page).locator('[data-turn]')).toHaveCount(1);
+
+  await switchTo(page, 'Maya Chen', 'Sara Lindqvist');
+
+  const stats = panel(page).locator('.as-stat');
+  const turns = panel(page).locator('[data-turn]');
+  // at least 3 s, and long enough to outlast the old reply, which takes about 7 s to finish
+  const until = Math.max(Date.now() + 3000, asked + 10_000);
+  let polls = 0;
+  while (Date.now() < until) {
+    expect(await turns.count(), 'the old question or reply came back').toBe(0);
+    expect(await stats.count(), 'a stat block from the old reply appeared').toBe(0);
+    polls++;
+    await page.waitForTimeout(100);
+  }
+  expect(polls).toBeGreaterThan(10);
+  // the thread still works for the new user
+  await expect(panel(page).getByText(/^Hi Sara\./)).toBeVisible();
+  await ask(page, 'How is the team doing?');
+  await expect(panel(page).locator('[data-turn="done"]')).toHaveCount(1);
+});
+
+test('AWS costs: Maya gets the chart and the cause, Daniel is told they are for leadership', async ({ page }) => {
+  await signInAs(page, 'p-maya');
+  await page.goto('/hermes/team');
+  await openPanel(page);
+  await ask(page, 'Why did AWS costs go up?');
+  const answer = panel(page).locator('[data-turn="done"]');
+  await expect(answer).toHaveCount(1);
+  await expect(answer.locator('svg[role="img"]')).toBeVisible();
+  await expect(answer.getByText(/12 extra instances/)).toBeVisible();
+
+  await switchTo(page, 'Maya Chen', 'Daniel Okafor');
+  await expect(panel(page).locator('[data-turn]')).toHaveCount(0);
+  await ask(page, 'Why did AWS costs go up?');
+  const denied = panel(page).locator('[data-turn="done"]');
+  await expect(denied).toHaveCount(1);
+  await expect(denied.getByText(/AWS costs are visible to leadership\./)).toBeVisible();
+  await expect(denied.getByText(/I can show AWS service health instead\./)).toBeVisible();
+  await expect(denied.locator('svg[role="img"]')).toHaveCount(0);
+});
+
+test('Team as Daniel (Manager): Platform people by name, the other team as a total, and the Manager copy', async ({ page }) => {
+  await signInAs(page, 'p-daniel');
+  await page.goto('/hermes/team');
+  const rows = page.getByRole('main').locator('table tbody tr');
+  await expect(page.getByText(MANAGER_COPY, { exact: true })).toBeVisible();
+  await expect(rows.filter({ hasText: 'Product team total' })).toHaveCount(1);
+  const names = await page.getByRole('main').locator('table tbody tr th').allTextContents();
+  expect(names).toContain('Product team total');
+  expect(names).toContain('Sara Lindqvist');
+  expect(names).not.toContain('Platform team total');
+  // every row besides the Product total is a named Platform person
+  expect(names.length).toBeGreaterThan(3);
+  for (const row of await rows.all()) {
+    const name = await row.locator('th').innerText();
+    if (name !== 'Product team total') await expect(row).toContainText('Platform');
+  }
+  await expect(page.getByText(DEVELOPER_COPY)).toHaveCount(0);
 });

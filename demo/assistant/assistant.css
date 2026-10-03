@@ -23,7 +23,7 @@
   --as-mono: var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
   --as-good: #146c2e;
   --as-warn: #8a5a00;
-  --as-bad: #c4232d;
+  --as-bad: #b71f29;
   /* categorical series, in a fixed order validated for colour-blind separation */
   --as-series-1: #2a78d6;
   --as-series-2: #eb6834;
