@@ -17,7 +17,9 @@ export function MountWhenNear({ height, release = false, className, children }: 
     if (!el) return;
     if (typeof IntersectionObserver === 'undefined') return setNear(true);
     const io = new IntersectionObserver(
-      ([entry]) => {
+      (entries) => {
+        // a busy page can hand over several changes at once: only the newest says where the demo is now
+        const entry = entries[entries.length - 1];
         if (entry.isIntersecting) {
           setNear(true);
           if (!release) io.disconnect();
