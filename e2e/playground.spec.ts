@@ -4,7 +4,7 @@
 import { COMPONENTS } from '../demo/site/routes';
 import { expect, expectAnimating, pixels, test } from './fixtures';
 
-// The playground covers all thirteen orbs; its controls are discovered from the page.
+// The playground covers every orb; its controls are discovered from the page.
 
 for (const c of COMPONENTS) {
   test(`${c.name}: every control works and keeps the orb drawing`, async ({ page }) => {
@@ -14,10 +14,13 @@ for (const c of COMPONENTS) {
     const stage = page.locator('.pg-stage');
     const code = page.locator('.codeblock code');
     await expect(code).toContainText(`import { ${c.name} } from './orbs';`);
-    const orb = stage.locator('canvas').first();
+    // BotOrb is SVG: it is checked for being there, not by its pixels
+    const svg = c.name === 'BotOrb';
+    const orb = svg ? stage.locator('[data-bot]') : stage.locator('canvas').first();
     // MascotOrb and GazeOrb only move for the pointer, clicks and blinks
-    const ambient = !['AskOrb', 'MascotOrb', 'GazeOrb'].includes(c.name);
+    const ambient = !['AskOrb', 'MascotOrb', 'GazeOrb', 'BotOrb'].includes(c.name);
     if (ambient) await expectAnimating(orb, { minDiff: 0.02 });
+    else if (svg) await expect(orb).toBeVisible();
     else if (c.name !== 'AskOrb') await expect.poll(async () => (await pixels(orb)).lit).toBeGreaterThan(0.002);
 
     const fields = page.locator('.pg-controls .pg-field');
@@ -72,7 +75,8 @@ for (const c of COMPONENTS) {
     }
 
     // still drawing after every change; Reset brings back the starting setup
-    if (c.name !== 'AskOrb') await expect.poll(async () => (await pixels(orb)).lit).toBeGreaterThan(0.002);
+    if (svg) await expect(orb).toBeVisible();
+    else if (c.name !== 'AskOrb') await expect.poll(async () => (await pixels(orb)).lit).toBeGreaterThan(0.002);
     await page.locator('.pg-controls input, .pg-controls select').first().focus();
     await page.getByRole('button', { name: 'Reset' }).click();
     await expect(page).toHaveURL(new RegExp(`/playground\\?orb=${c.slug}$`));

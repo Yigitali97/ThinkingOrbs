@@ -209,6 +209,49 @@ mascot.current?.bounce(); // for example when a reply arrives`,
       { name: 'bounce(strength?: number)', about: 'Play the jelly bounce.' },
     ],
   },
+  'bot-orb': {
+    intro:
+      'A friendly robot with a dark visor that floats on a glowing ring pedestal. Its face shows what the assistant is doing: eyes that blink and glance at the pointer while idle, pulsing ear lights while listening, a spinning arc while thinking, a waveform while speaking, a hop when an answer lands and amber eyes when something fails. SVG and CSS, no canvas.',
+    usage: `import { BotOrb, BotOrbRef } from './orbs';
+
+const bot = useRef<BotOrbRef>(null);
+<BotOrb ref={bot} state="thinking" size={220} />
+
+// listening and speaking follow real audio
+<BotOrb state="speaking" stream={ttsStream} />
+
+bot.current?.bounce(); // for example when a reply lands`,
+    props: [
+      { name: 'state', type: 'BotState', def: "'idle'", about: 'idle · listening · thinking · speaking · happy · error.' },
+      { name: 'size', type: 'number', def: '160', about: 'Width and height. Below 72 the pedestal hides and the face fills the frame.' },
+      { name: 'pedestal', type: 'boolean', def: 'true', about: 'The glowing ring pedestal under the bot.' },
+      { name: 'stream', type: 'MediaStream | null', def: 'null', about: 'Audio to react to while listening or speaking: the mic, or TTS playback.' },
+      { name: 'getLevel', type: '() => number', def: '—', about: 'Polled every frame while listening or speaking; return 0..1.' },
+      { name: 'level', type: 'number', def: '—', about: 'Loudness 0..1 from your own meter. stream and getLevel take precedence.' },
+      { name: 'label', type: 'string | null', def: "'Hermes'", about: 'Accessible name; null hides the bot from assistive tech.' },
+      ...common,
+    ],
+    states: {
+      title: 'States',
+      rows: [
+        { name: 'idle', about: 'Floats gently; the eyes blink now and then and glance toward the pointer.' },
+        { name: 'listening', about: 'The ear lights pulse with the audio level and sound rings ripple out.' },
+        { name: 'thinking', about: 'The visor shows a spinning arc and sparks circle the head.' },
+        { name: 'speaking', about: 'The visor becomes a waveform driven by the audio.' },
+        { name: 'happy', about: 'Smiling eyes and a hop. Call bounce() for a hop without changing state.' },
+        { name: 'error', about: 'Amber alert eyes and ear lights, and a short shake.' },
+      ],
+    },
+    methods: [
+      { name: 'bounce()', about: 'Hop once.' },
+      { name: 'blink()', about: 'Blink both eyes.' },
+    ],
+    notes: [
+      'BOT_STATES lists the states in order; botCaption(state) gives the short caption the bot announces politely (Ready, Listening, Thinking…).',
+      'With prefers-reduced-motion the bot stops floating, pulsing and orbiting; state changes become fades.',
+      'The wrapper carries data-bot and data-state, so tests and styles can find it.',
+    ],
+  },
   'gaze-orb': {
     intro: 'A white ball whose eyes live on its surface and turn toward the pointer in 3D, sliding out to the rim and foreshortening when the pointer is far away, with occasional blinks.',
     usage: `import { GazeOrb, GazeOrbRef } from './orbs';
