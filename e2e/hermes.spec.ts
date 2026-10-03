@@ -884,3 +884,39 @@ test('AWS costs: Maya gets the chart and the cause, Daniel is told they are for 
   await expect(denied.getByText(/I can show AWS service health instead\./)).toBeVisible();
   await expect(denied.locator('svg[role="img"]')).toHaveCount(0);
 });
+
+// The microphone is only ever asked for when you press Dictate or Voice mode, never just by opening Hermes.
+test('opening Hermes never asks for the microphone; pressing Dictate does', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __mic: string[] } & Record<string, unknown>;
+    w.__mic = [];
+    const md = navigator.mediaDevices;
+    if (md?.getUserMedia) {
+      const get = md.getUserMedia.bind(md);
+      md.getUserMedia = (c) => (w.__mic.push('getUserMedia'), get(c));
+    }
+    for (const name of ['SpeechRecognition', 'webkitSpeechRecognition']) {
+      const Ctor = w[name] as { prototype: { start(): void } } | undefined;
+      if (!Ctor) continue;
+      const start = Ctor.prototype.start;
+      Ctor.prototype.start = function (this: unknown) {
+        w.__mic.push(name);
+        return start.call(this);
+      };
+    }
+  });
+  await signInAs(page, 'p-maya');
+  const asked = () => page.evaluate(() => (window as unknown as { __mic: string[] }).__mic.length);
+
+  for (const path of ['/hermes', '/hermes/team', '/hermes/projects/atlas']) {
+    await page.goto(path);
+    await expect(page.locator('[data-bot]').first()).toBeVisible();
+    await page.waitForTimeout(1500); // let the morning brief and any effects settle
+    expect(await asked(), `microphone requested on load of ${path}`).toBe(0);
+  }
+
+  const dictate = page.getByRole('button', { name: 'Dictate' });
+  test.skip((await dictate.count()) === 0, 'this browser has no speech recognition, so there is no Dictate button');
+  await dictate.first().click();
+  await expect.poll(asked).toBeGreaterThan(0);
+});
