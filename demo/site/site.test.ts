@@ -3,10 +3,8 @@ import { ENTRIES } from '../playground/registry';
 import { DOCS } from './docs';
 import { highlight } from './highlight';
 import { isActive, normalisePath, parseHref, stripBase } from './router';
-import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta, SITE_LINKS } from './routes';
-import { notFoundPage, withMeta } from '../../vite.config';
-import { COMPANY } from '../hermes/store';
-import { HERMES_PATHS, hermesPageMeta, hermesProjectId } from '../hermes/routes';
+import { ALL_PATHS, COMPONENTS, EXAMPLES, GROUPS, pageMeta } from './routes';
+import { withMeta } from '../../vite.config';
 import * as orbs from '../../src/orbs';
 
 describe('routes', () => {
@@ -39,15 +37,6 @@ describe('routes', () => {
   it('only names real orbs in examples', () => {
     const names = new Set(COMPONENTS.map((c) => c.name));
     for (const e of EXAMPLES) for (const used of e.uses) expect(names.has(used), `${e.slug}: ${used}`).toBe(true);
-  });
-});
-
-describe('site links', () => {
-  it('links the Hermes site, which lives outside the docs app', () => {
-    expect(SITE_LINKS).toHaveLength(1);
-    expect(SITE_LINKS[0].href).toBe('/hermes/');
-    expect(SITE_LINKS[0].name).toBe('Hermes');
-    expect(SITE_LINKS[0].tint).toMatch(/^#[0-9a-f]{6}$/i);
   });
 });
 
@@ -143,83 +132,5 @@ describe('prerendered pages', () => {
     expect(html).toContain('<meta name="description" content="Desc" />');
     expect(html).toContain('<meta property="og:title" content="A &lt;b&gt; &amp; &quot;c&quot;" />');
     expect(html).not.toContain('old');
-  });
-});
-
-describe('the static 404 page', () => {
-  const shell = (name: string) =>
-    '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n' +
-    `    <title>${name}</title>\n    <meta name="description" content="x" />\n` +
-    `    <script type="module" crossorigin src="/assets/${name}.js"></script>\n  </head>\n` +
-    '  <body>\n    <div id="root"></div>\n  </body>\n</html>\n';
-  /** Runs the page's inline script at `path` and returns what it wrote into the head. */
-  const written = (html: string, path: string) => {
-    const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
-    let out = '';
-    new Function('location', 'document', script)({ pathname: path }, { write: (s: string) => (out += s) });
-    return out;
-  };
-  const hermes = { prefix: 'hermes', html: shell('hermes'), title: 'Page not found · Hermes' };
-  const page = (base: string) => notFoundPage(base, { html: shell('docs'), title: 'Page not found · Docs' }, [hermes]);
-
-  it.each([
-    ['/', '/hermes/projects/zephyr', 'hermes'],
-    ['/', '/hermes', 'hermes'],
-    ['/', '/hermes/', 'hermes'],
-    ['/', '/hermesx', 'docs'],
-    ['/', '/components/nope', 'docs'],
-    ['/ThinkingOrbs/', '/ThinkingOrbs/hermes/projects/zephyr', 'hermes'],
-    ['/ThinkingOrbs/', '/ThinkingOrbs/nope', 'docs'],
-    ['/ThinkingOrbs/', '/hermes/team', 'docs'],
-  ])('with base %s, %s boots the %s app', (base, path, site) => {
-    const head = written(page(base), path);
-    expect(head).toContain(`src="/assets/${site}.js"`);
-    expect(head).toContain(`<title>Page not found · ${site === 'hermes' ? 'Hermes' : 'Docs'}</title>`);
-    expect(head).not.toContain(`src="/assets/${site === 'hermes' ? 'docs' : 'hermes'}.js"`);
-  });
-
-  it('has one root and no static entry script of its own', () => {
-    const html = page('/');
-    expect(html.match(/<div id="root"><\/div>/g)).toHaveLength(1);
-    expect(html).not.toMatch(/<script type="module"/);
-    expect(html).not.toMatch(/<\/script>[\s\S]*<\/script>[\s\S]*<\/head>/);
-  });
-});
-
-describe('Hermes routes', () => {
-  it('has a title and description for every path, with no duplicates', () => {
-    for (const path of HERMES_PATHS) {
-      const meta = hermesPageMeta(path);
-      expect(meta, path).not.toBeNull();
-      expect(meta!.title, path).toMatch(/Hermes/);
-      expect(meta!.description.length, path).toBeGreaterThan(20);
-    }
-    expect(new Set(HERMES_PATHS).size).toBe(HERMES_PATHS.length);
-  });
-
-  it('titles pages "<Page> · Hermes" and the home page with its promise', () => {
-    expect(hermesPageMeta('/hermes')!.title).toBe('Hermes: ask anything about Brightline Labs');
-    expect(hermesPageMeta('/hermes/team')!.title).toBe('Team · Hermes');
-    expect(hermesPageMeta('/hermes/projects/atlas')!.title).toBe('Atlas · Hermes');
-  });
-
-  it('knows exactly the projects of the generated company', () => {
-    const projectPaths = HERMES_PATHS.filter((p) => p.startsWith('/hermes/projects/'));
-    expect(projectPaths.sort()).toEqual(COMPANY.projects.map((p) => `/hermes/projects/${p.id}`).sort());
-  });
-
-  it('treats trailing slashes as the same page and unknown paths as missing', () => {
-    expect(hermesPageMeta('/hermes/')).toEqual(hermesPageMeta('/hermes'));
-    expect(hermesPageMeta('/hermes/nope')).toBeNull();
-    expect(hermesPageMeta('/hermes/projects/zephyr')).toBeNull();
-    expect(hermesPageMeta('/nope')).toBeNull();
-  });
-
-  it('reads the project id from a project page path, and only for a project that exists', () => {
-    expect(hermesProjectId('/hermes/projects/atlas')).toBe('atlas');
-    expect(hermesProjectId('/hermes/projects/atlas/')).toBe('atlas');
-    expect(hermesProjectId('/hermes/projects/zephyr')).toBeNull();
-    expect(hermesProjectId('/hermes/projects')).toBeNull();
-    expect(hermesProjectId('/hermes/projects/atlas/extra')).toBeNull();
   });
 });

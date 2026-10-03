@@ -39,7 +39,7 @@ describe('BotOrb markup', () => {
     expect(start).toBeGreaterThan(0);
     // the image holds only the SVG, so the first </div> after it closes it
     const img = html.slice(start, html.indexOf('</div>', start));
-    expect(img).toContain('aria-label="Hermes"');
+    expect(img).toContain('aria-label="Assistant"');
     expect(img).not.toContain('aria-live');
     expect(img).not.toContain('Thinking');
     const rest = html.slice(start + img.length);

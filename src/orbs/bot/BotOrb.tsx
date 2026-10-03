@@ -67,7 +67,7 @@ const useBotId: () => string =
 const blinkDelay = (n: number) => 3000 + ((n * 1597 + 811) % 3001);
 
 export const BotOrb = forwardRef<BotOrbRef, BotOrbProps>(function BotOrb(
-  { state = 'idle', size = 160, level, stream = null, getLevel, pedestal = true, label = 'Hermes', className, style },
+  { state = 'idle', size = 160, level, stream = null, getLevel, pedestal = true, label = 'Assistant', className, style },
   ref
 ) {
   const rootRef = useRef<HTMLDivElement>(null);

@@ -182,13 +182,3 @@ export async function fakeMicrophone(page: Page, { deny = false } = {}) {
   }, deny);
 }
 
-/** Start the page signed in as a demo user, by writing the same value Hermes keeps in sessionStorage. */
-export async function signInAs(page: Page, id: string): Promise<void> {
-  await page.addInitScript((id) => {
-    try {
-      sessionStorage.setItem('hermes.user', id);
-    } catch {
-      // storage is blocked: the test will see the sign-in page
-    }
-  }, id);
-}
