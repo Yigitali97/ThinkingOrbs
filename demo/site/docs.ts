@@ -1,4 +1,4 @@
-// Reference content for each component page: usage, props, states and notes.
+// Reference content for each component on the components page: usage, props, states and notes.
 // Kept in step with the README; `docs.test.ts` checks every component has an entry.
 
 export interface Prop {
@@ -228,7 +228,7 @@ bot.current?.bounce(); // for example when a reply lands`,
       { name: 'stream', type: 'MediaStream | null', def: 'null', about: 'Audio to react to while listening or speaking: the mic, or TTS playback.' },
       { name: 'getLevel', type: '() => number', def: '—', about: 'Polled every frame while listening or speaking; return 0..1.' },
       { name: 'level', type: 'number', def: '—', about: 'Loudness 0..1 from your own meter. stream and getLevel take precedence.' },
-      { name: 'label', type: 'string | null', def: "'Hermes'", about: 'Accessible name; null hides the bot from assistive tech.' },
+      { name: 'label', type: 'string | null', def: "'Assistant'", about: 'Accessible name; null hides the bot from assistive tech.' },
       ...common,
     ],
     states: {

@@ -1,6 +1,6 @@
 import { CSSProperties, lazy, ReactNode, Suspense, useEffect, useRef } from 'react';
 import { StatusOrb } from '../../src/orbs';
-import { ComponentPage } from './pages/Components';
+import { ComponentsPage } from './pages/Components';
 import { NotFound } from './pages/NotFound';
 import { Link, Location, useLocation, useScrollManagement } from './router';
 import { COMPONENTS, isHome, pageMeta, SITE_NAME } from './routes';
@@ -12,14 +12,19 @@ const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then((m) => (
 export const REPO_URL = 'https://github.com/Yigitali97/ThinkingOrbs';
 const inComponents = (path: string) => isHome(path) || path.startsWith('/components/');
 
-function route(loc: Location): { page: ReactNode; tint?: string } {
+/**
+ * The page for a path. `key` names the page, so moving between paths of the same page
+ * doesn't remount it; `anchor` is the section a path stands for (/components/tool-orb).
+ */
+function route(loc: Location): { page: ReactNode; key: string; anchor?: string; tint?: string } {
   const { path } = loc;
-  if (path === '/examples') return { page: <ExamplesPage /> };
-  if (path === '/playground') return { page: <PlaygroundPage />, tint: '#a78bfa' };
-  // the site opens on the first component's page
-  const c = isHome(path) ? COMPONENTS[0] : COMPONENTS.find((m) => path === `/components/${m.slug}`);
-  if (c) return { page: <ComponentPage key={c.slug} meta={c} />, tint: c.tint };
-  return { page: <NotFound /> };
+  if (path === '/examples') return { page: <ExamplesPage />, key: path };
+  if (path === '/playground') return { page: <PlaygroundPage />, key: path, tint: '#a78bfa' };
+  // the site opens on the components, all on one page
+  if (isHome(path)) return { page: <ComponentsPage />, key: 'components' };
+  const c = COMPONENTS.find((m) => path === `/components/${m.slug}`);
+  if (c) return { page: <ComponentsPage />, key: 'components', anchor: c.slug };
+  return { page: <NotFound />, key: path };
 }
 
 function setMeta(name: string, content: string) {
@@ -87,10 +92,10 @@ function Footer() {
 
 export function App() {
   const loc = useLocation();
-  const { page, tint } = route(loc);
+  const { page, key, anchor, tint } = route(loc);
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
-  useScrollManagement(loc);
+  useScrollManagement(loc, anchor);
 
   useEffect(() => {
     const meta = pageMeta(loc.path);
@@ -108,9 +113,9 @@ export function App() {
       </a>
       <Header />
       <main id="main" ref={main} tabIndex={-1} className="main">
-        <ErrorBoundary key={loc.path}>
+        <ErrorBoundary key={key}>
           <Suspense fallback={<div className="page-loading" role="status">Loading…</div>}>
-            <div className="route" key={loc.path}>
+            <div className="route" key={key}>
               {page}
             </div>
           </Suspense>

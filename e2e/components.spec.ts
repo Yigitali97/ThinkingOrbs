@@ -1,22 +1,28 @@
-// Every component page: the live demo draws and animates, every state can be
-// switched to, and each orb's own transitions (streaming, docking, ranking,
-// uploading, reasoning, scanning, watching) run through to the end.
+// Every component, deep-linked on the components page: the live demo draws and
+// animates, every state can be switched to, and each orb's own transitions
+// (streaming, docking, ranking, uploading, reasoning, scanning, watching) run through to the end.
 
 import { ASSISTANT_COLORS } from '../src/orbs/assistant/engine';
 import { STATUS_VARIANTS } from '../src/orbs/status/engine';
 import { COMPONENTS } from '../demo/site/routes';
 import { expect, expectAnimating, fakeMicrophone, frameDiff, pixels, pixelsOfEach, test } from './fixtures';
 
-const demo = (page: import('@playwright/test').Page) => page.locator('.doc-demo');
+/** The live demo of the component the page was opened at (/components/<slug>). */
+const demo = (page: import('@playwright/test').Page) => page.locator(`#${new URL(page.url()).pathname.split('/').pop()} .doc-demo`);
 
-test('every component page shows its demo, props and code', async ({ page }) => {
+test('every component shows its demo, with its usage and props folded underneath', async ({ page }) => {
   for (const c of COMPONENTS) {
     await page.goto(`/components/${c.slug}`);
-    await expect(page.locator('h1')).toHaveText(c.name);
-    await expect(page.locator('#props')).toBeVisible();
-    await expect(page.locator('.table-props tbody tr').first()).toBeVisible();
-    await expect(page.locator('.codeblock').first()).toContainText(c.name);
-    await expect(page.locator('.sidebar a[aria-current="page"]')).toHaveText(c.name);
+    const section = page.locator(`#${c.slug}`);
+    await expect(page.locator('h1')).toHaveText('Components');
+    await expect(section.locator('h2')).toHaveText(c.name);
+    await expect(section.locator('h2')).toBeInViewport();
+    await expect(page.locator('.sidebar a[aria-current="location"]')).toHaveText(c.name);
+    await expect(section.locator('.table-props')).toBeHidden();
+    await section.locator('summary').click();
+    await expect(section.locator(`#${c.slug}-props`)).toBeVisible();
+    await expect(section.locator('.table-props tbody tr').first()).toBeVisible();
+    await expect(section.locator('.codeblock').first()).toContainText(c.name);
     // AskOrb draws its orb only once a question is asked
     if (c.slug === 'ask-orb') await expect(demo(page).getByRole('textbox')).toBeVisible();
     // BotOrb is SVG, not a canvas
@@ -317,7 +323,7 @@ test('AskOrb runs the whole ask → stages → answer flow, and starts over', as
   // record what the live status region announces, however briefly
   await page.evaluate(() => {
     const w = window as unknown as { said: string[] };
-    const el = document.querySelector('.doc-demo .ao-sr')!;
+    const el = document.querySelector('#ask-orb .ao-sr')!;
     w.said = [];
     new MutationObserver(() => {
       const t = el.textContent!;

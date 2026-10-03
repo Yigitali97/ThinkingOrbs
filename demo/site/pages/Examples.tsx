@@ -2,15 +2,16 @@
 // of the site. Each example mounts only once it comes near the screen, so the
 // page starts light and an example starts running when you get to it.
 
-import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CSSProperties, ReactNode, useLayoutEffect, useRef } from 'react';
 import { ChatApp } from '../../chat-app/ChatApp';
 import { AgentRun } from '../../examples/AgentRun';
 import { AskFlow } from '../../examples/AskFlow';
 import { VoiceAssistant } from '../../voice-assistant/VoiceAssistant';
-import { href, Link, useLocation } from '../router';
+import { Link, useLocation } from '../router';
 import { Prop } from '../docs';
-import { COMPONENTS, ExampleMeta, EXAMPLES, SITE_LINKS } from '../routes';
-import { CodeBlock } from '../ui';
+import { COMPONENTS, ExampleMeta, EXAMPLES } from '../routes';
+import { MountWhenNear, useActiveSection, useKeepActiveInView } from '../sections';
+import { CodeBlock, Disclosure } from '../ui';
 import { PropsTable } from './Components';
 
 const slugFor = (name: string) => COMPONENTS.find((c) => c.name === name)?.slug;
@@ -114,30 +115,6 @@ const DETAILS: Record<string, Detail> = {
   },
 };
 
-/** Mounts its children the first time they come near the screen, then keeps them. */
-function MountWhenNear({ height, children }: { height: number; children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [near, setNear] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === 'undefined') return setNear(true);
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setNear(true);
-        io.disconnect();
-      }
-    }, { rootMargin: '200px 0px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div ref={ref} className="example-live" style={{ minHeight: height }} data-mounted={near ? 'yes' : 'no'}>
-      {near ? children : null}
-    </div>
-  );
-}
-
 function ExampleSection({ meta }: { meta: ExampleMeta }) {
   const d = DETAILS[meta.slug];
   return (
@@ -156,79 +133,32 @@ function ExampleSection({ meta }: { meta: ExampleMeta }) {
         </p>
       </header>
 
-      <MountWhenNear height={d.height}>{d.render()}</MountWhenNear>
+      <MountWhenNear height={d.height} className="example-live">{d.render()}</MountWhenNear>
 
-      <details className="disclosure">
-        <summary>
-          <svg className="disclosure-chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {d.props ? 'Usage and props' : 'Usage'}
-        </summary>
-        <div className="disclosure-body">
-          <CodeBlock code={d.code} title={d.folder} />
-          {d.props && (
-            <>
-              <h3 id={`${meta.slug}-props`}>Props</h3>
-              <PropsTable props={d.props} labelledBy={`${meta.slug}-props`} />
-            </>
-          )}
-          <h3>Good to know</h3>
-          <ul className="notes">
-            {d.notes.map((n) => (
-              <li key={n}>{n}</li>
-            ))}
-          </ul>
-        </div>
-      </details>
+      <Disclosure label={d.props ? 'Usage and props' : 'Usage'}>
+        <CodeBlock code={d.code} title={d.folder} />
+        {d.props && (
+          <>
+            <h3 id={`${meta.slug}-props`}>Props</h3>
+            <PropsTable props={d.props} labelledBy={`${meta.slug}-props`} />
+          </>
+        )}
+        <h3>Good to know</h3>
+        <ul className="notes">
+          {d.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      </Disclosure>
     </section>
   );
-}
-
-/** The example whose section is at the top of the screen (or the last one, at the bottom of the page). */
-function useActiveSection(ids: string[]) {
-  const [active, setActive] = useState(ids[0]);
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      let current = ids[0];
-      if (atBottom) current = ids[ids.length - 1];
-      else
-        for (const id of ids) {
-          const el = document.getElementById(id);
-          if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.35) current = id;
-        }
-      setActive(current);
-    };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, [ids]);
-  return active;
 }
 
 const IDS = EXAMPLES.map((e) => e.slug);
 
 function Sidebar({ active }: { active: string }) {
   const nav = useRef<HTMLElement>(null);
-  // on phones the list scrolls sideways: keep the active example in view
-  useEffect(() => {
-    const list = nav.current;
-    const link = list?.querySelector<HTMLElement>(`a[href$="#${active}"]`);
-    if (!list || !link || list.scrollWidth <= list.clientWidth) return;
-    const left = link.offsetLeft - list.offsetLeft - 16;
-    list.scrollTo({ left, behavior: 'smooth' });
-  }, [active]);
+  useKeepActiveInView(nav, active);
   return (
     <nav ref={nav} className="sidebar sidebar-examples" aria-label="Examples">
       <div className="sidebar-group">
@@ -257,7 +187,7 @@ export function ExamplesPage() {
   }, []);
 
   return (
-    <div className="page page-docs page-examples">
+    <div className="page page-docs page-sections page-examples">
       <Sidebar active={active} />
       <div className="doc">
         <header className="page-head">
@@ -267,20 +197,6 @@ export function ExamplesPage() {
         {EXAMPLES.map((e) => (
           <ExampleSection key={e.slug} meta={e} />
         ))}
-        <section className="sites" aria-labelledby="full-sites-title">
-          <h2 id="full-sites-title">Full sites</h2>
-          <p>Whole products built on the orbs. They open as their own site, outside these docs.</p>
-          <ul className="site-cards">
-            {SITE_LINKS.map((l) => (
-              <li key={l.name}>
-                <a className="site-card" href={href(l.href)} style={{ '--tint': l.tint } as CSSProperties}>
-                  <strong>{l.name}</strong>
-                  <span>{l.summary}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
       </div>
     </div>
   );

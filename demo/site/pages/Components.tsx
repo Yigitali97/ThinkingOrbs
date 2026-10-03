@@ -1,9 +1,10 @@
-import { CSSProperties } from 'react';
+import { CSSProperties, useRef } from 'react';
 import { DEMOS } from '../demos';
 import { DOCS, Prop } from '../docs';
 import { Link } from '../router';
-import { ComponentMeta, COMPONENTS, GROUPS, isHome } from '../routes';
-import { CodeBlock } from '../ui';
+import { ComponentMeta, COMPONENTS, GROUPS } from '../routes';
+import { MountWhenNear, useActiveSection, useKeepActiveInView } from '../sections';
+import { CodeBlock, Disclosure } from '../ui';
 
 export function PropsTable({ props, labelledBy }: { props: Prop[]; labelledBy: string }) {
   return (
@@ -36,21 +37,38 @@ export function PropsTable({ props, labelledBy }: { props: Prop[]; labelledBy: s
   );
 }
 
-function Sidebar({ current }: { current: string }) {
+/** Space kept for each demo before it mounts (its height on a desktop screen), so the page doesn't jump. */
+const DEMO_HEIGHT: Record<string, number> = {
+  'assistant-orb': 640,
+  'voice-orb': 550,
+  'status-orb': 490,
+  'token-orb': 250,
+  'tool-orb': 400,
+  'ask-orb': 620,
+  'mascot-orb': 410,
+  'bot-orb': 450,
+  'gaze-orb': 390,
+  'search-orb': 460,
+  'ingest-orb': 475,
+  'reasoning-orb': 460,
+  'vision-orb': 575,
+  'reel-orb': 490,
+};
+
+const IDS = COMPONENTS.map((c) => c.slug);
+
+function Sidebar({ active }: { active: string }) {
+  const nav = useRef<HTMLElement>(null);
+  useKeepActiveInView(nav, active);
   return (
-    <nav className="sidebar" aria-label="Components">
+    <nav ref={nav} className="sidebar" aria-label="Components">
       {GROUPS.map((group) => (
         <div key={group} className="sidebar-group">
           <h2>{group}</h2>
           <ul>
             {COMPONENTS.filter((c) => c.group === group).map((c) => (
               <li key={c.slug}>
-                <Link
-                  to={`/components/${c.slug}`}
-                  match={c === COMPONENTS[0] ? isHome : undefined}
-                  style={{ '--tint': c.tint } as CSSProperties}
-                  className={c.slug === current ? 'is-current' : undefined}
-                >
+                <Link to={`/components#${c.slug}`} style={{ '--tint': c.tint } as CSSProperties} aria-current={c.slug === active ? 'location' : undefined}>
                   {c.name}
                 </Link>
               </li>
@@ -62,44 +80,37 @@ function Sidebar({ current }: { current: string }) {
   );
 }
 
-export function ComponentPage({ meta }: { meta: ComponentMeta }) {
+function ComponentSection({ meta }: { meta: ComponentMeta }) {
   const doc = DOCS[meta.slug];
   const Demo = DEMOS[meta.slug];
-  const i = COMPONENTS.indexOf(meta);
-  const prev = COMPONENTS[i - 1];
-  const next = COMPONENTS[i + 1];
+  const id = (part: string) => `${meta.slug}-${part}`;
 
   return (
-    <div className="page page-docs">
-      <Sidebar current={meta.slug} />
-      <article className="doc">
-        <header className="page-head">
-          <p className="crumb">
-            <Link to="/">Components</Link> <span aria-hidden="true">/</span> {meta.group}
-          </p>
-          <h1 className="doc-title">{meta.name}</h1>
-          <p className="lede">{doc.intro}</p>
-        </header>
+    <section id={meta.slug} className="component" aria-labelledby={id('title')} style={{ '--tint': meta.tint } as CSSProperties}>
+      <header className="component-head">
+        <p className="crumb">{meta.group}</p>
+        <h2 id={id('title')}>{meta.name}</h2>
+        <p>{doc.intro}</p>
+      </header>
 
-        <section aria-label="Live demo" className="doc-demo">
-          <Demo />
-        </section>
+      <MountWhenNear height={DEMO_HEIGHT[meta.slug]} release className="doc-demo">
+        <Demo />
+      </MountWhenNear>
 
-        <div className="doc-links">
-          <Link to={`/playground?orb=${meta.slug}`} className="btn">
-            Try every option in the playground
-          </Link>
-        </div>
+      <div className="doc-links">
+        <Link to={`/playground?orb=${meta.slug}`} className="btn">
+          Try every option in the playground
+        </Link>
+      </div>
 
-        <section aria-labelledby="usage">
-          <h2 id="usage">Usage</h2>
-          <CodeBlock code={doc.usage} title="Example.tsx" />
-        </section>
+      <Disclosure label="Usage and props">
+        <h3 id={id('usage')}>Usage</h3>
+        <CodeBlock code={doc.usage} title="Example.tsx" />
 
         {doc.states && (
-          <section aria-labelledby="states">
-            <h2 id="states">{doc.states.title}</h2>
-            <div className="table-wrap" role="region" aria-labelledby="states" tabIndex={0}>
+          <>
+            <h3 id={id('states')}>{doc.states.title}</h3>
+            <div className="table-wrap" role="region" aria-labelledby={id('states')} tabIndex={0}>
               <table className="table">
                 <thead>
                   <tr>
@@ -122,17 +133,15 @@ export function ComponentPage({ meta }: { meta: ComponentMeta }) {
                 </tbody>
               </table>
             </div>
-          </section>
+          </>
         )}
 
-        <section aria-labelledby="props">
-          <h2 id="props">Props</h2>
-          <PropsTable props={doc.props} labelledBy="props" />
-        </section>
+        <h3 id={id('props')}>Props</h3>
+        <PropsTable props={doc.props} labelledBy={id('props')} />
 
         {doc.methods && (
-          <section aria-labelledby="methods">
-            <h2 id="methods">Ref methods</h2>
+          <>
+            <h3 id={id('methods')}>Ref methods</h3>
             <dl className="methods">
               {doc.methods.map((m) => (
                 <div key={m.name}>
@@ -143,37 +152,42 @@ export function ComponentPage({ meta }: { meta: ComponentMeta }) {
                 </div>
               ))}
             </dl>
-          </section>
+          </>
         )}
 
         {doc.notes && (
-          <section aria-labelledby="notes">
-            <h2 id="notes">Good to know</h2>
+          <>
+            <h3 id={id('notes')}>Good to know</h3>
             <ul className="notes">
               {doc.notes.map((n) => (
                 <li key={n}>{n}</li>
               ))}
             </ul>
-          </section>
+          </>
         )}
+      </Disclosure>
+    </section>
+  );
+}
 
-        <nav className="pager" aria-label="More components">
-          {prev ? (
-            <Link to={`/components/${prev.slug}`} className="pager-prev">
-              <span>Previous</span>
-              {prev.name}
-            </Link>
-          ) : (
-            <span />
-          )}
-          {next && (
-            <Link to={`/components/${next.slug}`} className="pager-next">
-              <span>Next</span>
-              {next.name}
-            </Link>
-          )}
-        </nav>
-      </article>
+/** Every component on one page. Each demo runs only while it is near the screen. */
+export function ComponentsPage() {
+  const active = useActiveSection(IDS);
+  return (
+    <div className="page page-docs page-sections page-components">
+      <Sidebar active={active} />
+      <div className="doc">
+        <header className="page-head">
+          <h1>Components</h1>
+          <p className="lede">
+            Orbs that show what an assistant is doing, driven by real audio, tokens, tool calls, sources and progress. Copy the src/orbs/ folder into your app, or
+            just the orbs you need along with src/orbs/shared/.
+          </p>
+        </header>
+        {COMPONENTS.map((c) => (
+          <ComponentSection key={c.slug} meta={c} />
+        ))}
+      </div>
     </div>
   );
 }
