@@ -1,5 +1,6 @@
 // Hands-free voice mode: an orb that listens, thinks and speaks, with a caption of what was heard. Answers still land in the thread.
-// It replaces the message box while it is on; End voice mode stops the loop.
+// It replaces the message box while it is on; End voice mode stops the loop. While it thinks or speaks, the orb is a button
+// that interrupts, by tap or from the keyboard.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { ASSISTANT_COLORS, AssistantOrb } from '../../src/orbs';
@@ -12,7 +13,7 @@ const LABELS = {
   connecting: 'Connecting…',
   listening: 'Listening…',
   thinking: 'Thinking…',
-  speaking: 'Speaking — tap the orb to interrupt',
+  speaking: 'Speaking — press the orb to interrupt',
   interrupted: 'Go ahead…',
   muted: 'Muted',
   error: 'Something went wrong',
@@ -46,7 +47,7 @@ export function VoiceMode({ onEnd }: { onEnd: () => void }) {
         className="as-voice-orb"
         onClick={() => busy && va.interrupt()}
         aria-label={busy ? 'Interrupt the assistant' : 'Voice mode orb'}
-        tabIndex={-1}
+        tabIndex={busy ? 0 : -1}
       >
         <AssistantOrb state={va.state} size={120} stream={va.state === 'listening' ? va.stream : null} getLevel={va.getLevel} label={null} />
       </button>

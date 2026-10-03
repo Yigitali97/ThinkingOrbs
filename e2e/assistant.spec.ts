@@ -1,7 +1,7 @@
 // The Hermes assistant: the dock, the panel and its shortcuts, answers with blocks, persistence across pages and the mobile sheet.
 
 import type { Page } from '@playwright/test';
-import { expect, signInAs, test } from './fixtures';
+import { expect, fakeMicrophone, signInAs, test } from './fixtures';
 
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Hermes' }).or(page.getByRole('dialog', { name: 'Hermes' }));
 const composer = (page: Page) => page.getByRole('textbox', { name: 'Ask Hermes' });
@@ -266,4 +266,43 @@ test('voice mode replaces the message box, and End voice mode brings it back wit
   await end.click();
   await expect(composer(page)).toBeFocused();
   await expect(voice).toBeVisible();
+});
+
+test('while voice mode thinks or speaks, the orb can be reached and pressed from the keyboard to interrupt', async ({ page }) => {
+  await fakeMicrophone(page);
+  // a recognizer that hears one question each time it starts
+  await page.addInitScript(() => {
+    class Heard {
+      lang = '';
+      interimResults = false;
+      continuous = false;
+      onresult: ((e: unknown) => void) | null = null;
+      onerror: ((e: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start() {
+        setTimeout(() => {
+          const result = Object.assign([{ transcript: 'How is the team doing?' }], { isFinal: true });
+          this.onresult?.({ resultIndex: 0, results: [result] });
+          this.onend?.();
+        }, 200);
+      }
+      stop() {}
+      abort() {}
+    }
+    const w = window as unknown as Record<string, unknown>;
+    w.SpeechRecognition = Heard;
+    w.webkitSpeechRecognition = Heard;
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Open Hermes' }).click();
+  await panel(page).getByRole('button', { name: 'Voice mode' }).click();
+  const voice = panel(page).locator('.as-voice');
+  await expect(voice).toHaveAttribute('data-state', /thinking|speaking/);
+  // from End voice mode, step back past Mute to the orb
+  await expect(panel(page).getByRole('button', { name: 'End voice mode' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(panel(page).getByRole('button', { name: 'Interrupt the assistant' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(voice).toHaveAttribute('data-state', 'interrupted');
 });
