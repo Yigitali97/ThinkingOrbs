@@ -1,12 +1,30 @@
+<div align="center">
+
 # ThinkingOrbs
 
-Animated orb components for AI interfaces — fourteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
+**Animated orb components for AI interfaces.**<br>
+Fourteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
 
-Every orb but one is drawn on a `<canvas>` (BotOrb is SVG and CSS), and each is driven by **real data** where it can be — audio level, streamed tokens, tool calls, sources, upload progress, reasoning steps, image pixels, video frames — instead of a canned loop.
+[![CI](https://github.com/Yigitali97/ThinkingOrbs/actions/workflows/ci.yml/badge.svg)](https://github.com/Yigitali97/ThinkingOrbs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![React 17+](https://img.shields.io/badge/react-17%2B-61dafb?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 
-- **React 17+**, TypeScript, no dependencies beyond React
-- Works with Vite, Create React App and Next.js (components are marked `'use client'`)
-- Exposes status text and ARIA roles for screen readers, and most orbs respect `prefers-reduced-motion`
+[Getting started](#getting-started) · [Components](#components) · [Examples](#examples) · [Run the demo](#demo--development) · [Contributing](#contributing)
+
+<img src="docs/screenshots/gallery.png" alt="Twelve of the orbs: AssistantOrb, VoiceOrb, SearchOrb, ReasoningOrb, ToolOrb, BotOrb, VisionOrb, ReelOrb, IngestOrb, StatusOrb, MascotOrb and GazeOrb" width="100%">
+
+</div>
+
+## Features
+
+- **Driven by real data.** Each orb reacts to what is actually happening, not a canned loop: audio level, streamed tokens, tool calls, search sources, upload progress, reasoning steps, image pixels and video frames.
+- **One colour language.** Grey is idle, blue is listening, orange is thinking, violet is searching, teal is reading files, green is done, red is an error, across every orb.
+- **Small and portable.** React 17+ and TypeScript, with no dependencies beyond React. Copy the folder in; there is no package to install.
+- **Framework-friendly.** Works with Vite, Create React App and Next.js (components are marked `'use client'`), and every orb also has a framework-free engine.
+- **Accessible.** Status text and ARIA roles for screen readers, and most orbs respect `prefers-reduced-motion`.
+- **Tested in a real browser.** Playwright drives every orb through its states and checks from screenshots that it draws, moves and uses the right colours, plus axe accessibility checks on every page.
 
 ```tsx
 import { AssistantOrb, useMicrophone } from './orbs';
@@ -21,6 +39,7 @@ const mic = useMicrophone();
 
 - [Which orb for which situation](#which-orb-for-which-situation)
 - [Getting started](#getting-started)
+- [Examples](#examples)
 - Components
   - Voice: [AssistantOrb](#assistantorb) · [VoiceOrb](#voiceorb)
   - Chat: [StatusOrb](#statusorb) · [TokenOrb](#tokenorb) · [ToolOrb](#toolorb) · [AskOrb](#askorb) · [MascotOrb](#mascotorb) · [BotOrb](#botorb) · [GazeOrb](#gazeorb)
@@ -31,6 +50,8 @@ const mic = useMicrophone();
 - [Using an orb without React](#using-an-orb-without-react)
 - [Demo & development](#demo--development)
 - [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -56,7 +77,17 @@ const mic = useMicrophone();
 
 ## Getting started
 
-Copy the `src/orbs/` folder into your project and import from its entry point:
+ThinkingOrbs isn't published to npm. You copy the source into your app, so you own it and can change anything. Copy the `src/orbs/` folder into your project:
+
+```bash
+git clone https://github.com/Yigitali97/ThinkingOrbs.git
+```
+
+```bash
+cp -r ThinkingOrbs/src/orbs ./src/orbs
+```
+
+Then import from its entry point:
 
 ```tsx
 import { StatusOrb, TokenOrb, SearchOrb } from './orbs';
@@ -67,6 +98,29 @@ Each orb also lives in its own folder (`src/orbs/<name>/`), so you can copy only
 **Stylesheets.** Two components import a CSS file of their own: `AskOrb` (`ask/ask-orb.css`) and `ToolOrb` (`tool/tool-orb.css`). Vite, CRA and the Next.js App Router handle this as-is. If your setup only allows global CSS in a single entry file (for example the Next.js Pages Router), import those two files there instead.
 
 **Microphone.** `useMicrophone()` and microphone input need a secure page (`https://` or `localhost`).
+
+---
+
+## Examples
+
+The demo site includes complete samples built from the orbs. Each one lives in its own folder under `demo/`, so you can copy it and plug in your model. See [Demo & development](#demo--development) for how they are built and wired.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/chat-app.png" alt="Chat app sample watching a video: a ReelOrb in the live activity row and a strip of frames under it">
+      <p><b>Chat app</b>: each orb has one job and appears only while it's doing it. Here a ReelOrb is watching a video, with a MascotOrb avatar and a StatusOrb in the header.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/agent-run.png" alt="Agent run example in its search stage: a SearchOrb ranking eight sources">
+      <p><b>Agent run</b>: one agent turn from question to answer, going reasoning → search → tools → streamed reply. Here a SearchOrb is ranking sources.</p>
+    </td>
+  </tr>
+</table>
+
+<img src="docs/screenshots/playground.png" alt="Playground with ReasoningOrb selected: the orb on the left and its controls on the right" width="100%">
+
+**Playground.** Pick any orb, change every option with live controls, and copy the generated JSX straight into your app. The URL keeps your setup, so you can share it.
 
 ---
 
@@ -490,6 +544,8 @@ Engines: `createStatusOrb`, `createGazeOrb`, `createMascotOrb`, `createVoiceOrb`
 
 The demo is a small site with three sections:
 
+<img src="docs/screenshots/components.png" alt="The Components page of the demo site, showing SearchOrb with its sidebar of every orb" width="100%">
+
 | Page | URL | |
 |---|---|---|
 | Components | `/`, `/components/<name>` | every orb in one scrolling list, each demo running only while it is near the screen. The sidebar highlights the one on screen, each orb's usage, states, props, ref methods and notes fold away under its demo, and `/components/<name>` or `/components#<name>` links straight to one |
@@ -604,6 +660,30 @@ demo/               the demo site (main.tsx, samples.ts)
   voice-assistant/  the voice assistant sample (useVoiceAssistant, brain, UI)
   chat-app/         the chat app sample (agent protocol + demo agent, UI)
 e2e/                browser tests (Playwright)
+docs/screenshots/   images used in this README
 ```
 
 Each component folder holds `engine.ts` (the canvas renderer), the React component, and an `index.ts`; `bot/` has its SVG component and a stylesheet instead of an engine.
+
+---
+
+## Contributing
+
+Contributions are welcome: bug reports, new orbs, new states for existing orbs, and documentation fixes.
+
+1. Open an [issue](https://github.com/Yigitali97/ThinkingOrbs/issues) to report a bug or discuss a larger change before you start on it.
+2. Fork the repository and create a branch from `main`.
+3. Run the site with `npm run dev` and try your change on the component's page and in the playground.
+4. Run `npm run test:all` before you open a pull request. CI runs the same type-check, unit tests, build and browser tests.
+
+When adding or changing an orb:
+
+- Keep it free of dependencies beyond React, and put the drawing in a framework-free `engine.ts` with a thin React wrapper.
+- Follow the [shared conventions](#shared-conventions): the colour meanings, a text equivalent for screen readers, and a calmer version under `prefers-reduced-motion`.
+- Add it to the demo (its component page and the playground registry) and document its props in this README.
+
+---
+
+## License
+
+[MIT](LICENSE)
