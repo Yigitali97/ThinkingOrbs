@@ -5,15 +5,16 @@
 **Animated orb components for AI interfaces.**<br>
 Fourteen React components that show what an assistant is doing: listening, thinking, searching, calling tools, reading files, watching video, answering.
 
+[![Live demo](https://img.shields.io/badge/demo-live-8b7cff)](https://thinkingorbs.netlify.app/)
 [![CI](https://github.com/Yigitali97/ThinkingOrbs/actions/workflows/ci.yml/badge.svg)](https://github.com/Yigitali97/ThinkingOrbs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![React 17+](https://img.shields.io/badge/react-17%2B-61dafb?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 
-[Getting started](#getting-started) · [Components](#components) · [Examples](#examples) · [Run the demo](#demo--development) · [Contributing](#contributing)
+**[Live demo](https://thinkingorbs.netlify.app/)** · [Getting started](#getting-started) · [Components](#components) · [Examples](#examples) · [Run the demo](#demo--development) · [Contributing](#contributing)
 
-<img src="docs/screenshots/gallery.png" alt="Twelve of the orbs: AssistantOrb, VoiceOrb, SearchOrb, ReasoningOrb, ToolOrb, BotOrb, VisionOrb, ReelOrb, IngestOrb, StatusOrb, MascotOrb and GazeOrb" width="100%">
+<a href="https://thinkingorbs.netlify.app/"><img src="docs/screenshots/gallery.png" alt="Twelve of the orbs: AssistantOrb, VoiceOrb, SearchOrb, ReasoningOrb, ToolOrb, BotOrb, VisionOrb, ReelOrb, IngestOrb, StatusOrb, MascotOrb and GazeOrb" width="100%"></a>
 
 </div>
 
@@ -103,24 +104,24 @@ Each orb also lives in its own folder (`src/orbs/<name>/`), so you can copy only
 
 ## Examples
 
-The demo site includes complete samples built from the orbs. Each one lives in its own folder under `demo/`, so you can copy it and plug in your model. See [Demo & development](#demo--development) for how they are built and wired.
+The [demo site](https://thinkingorbs.netlify.app/examples/) includes complete samples built from the orbs. Each one lives in its own folder under `demo/`, so you can copy it and plug in your model. See [Demo & development](#demo--development) for how they are built and wired.
 
 <table>
   <tr>
     <td width="50%" valign="top">
       <img src="docs/screenshots/chat-app.png" alt="Chat app sample watching a video: a ReelOrb in the live activity row and a strip of frames under it">
-      <p><b>Chat app</b>: each orb has one job and appears only while it's doing it. Here a ReelOrb is watching a video, with a MascotOrb avatar and a StatusOrb in the header.</p>
+      <p><b><a href="https://thinkingorbs.netlify.app/examples/#chat-app">Chat app</a></b>: each orb has one job and appears only while it's doing it. Here a ReelOrb is watching a video, with a MascotOrb avatar and a StatusOrb in the header.</p>
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/agent-run.png" alt="Agent run example in its search stage: a SearchOrb ranking eight sources">
-      <p><b>Agent run</b>: one agent turn from question to answer, going reasoning → search → tools → streamed reply. Here a SearchOrb is ranking sources.</p>
+      <p><b><a href="https://thinkingorbs.netlify.app/examples/#agent-run">Agent run</a></b>: one agent turn from question to answer, going reasoning → search → tools → streamed reply. Here a SearchOrb is ranking sources.</p>
     </td>
   </tr>
 </table>
 
 <img src="docs/screenshots/playground.png" alt="Playground with ReasoningOrb selected: the orb on the left and its controls on the right" width="100%">
 
-**Playground.** Pick any orb, change every option with live controls, and copy the generated JSX straight into your app. The URL keeps your setup, so you can share it.
+**[Playground](https://thinkingorbs.netlify.app/playground/).** Pick any orb, change every option with live controls, and copy the generated JSX straight into your app. The URL keeps your setup, so you can share it.
 
 ---
 
@@ -133,6 +134,8 @@ All components accept `className` and `style`. Sizes are in CSS pixels. Defaults
 #### AssistantOrb
 
 A dot sphere for voice assistants. Each state has its own colour and motion, and the sphere cross-fades between them; one-off reactions play when a state begins (a springy shrink on `interrupted`, a glitch shake on `error`).
+
+[Try it live →](https://thinkingorbs.netlify.app/components/assistant-orb/)
 
 | State | Colour | Motion |
 |---|---|---|
@@ -166,6 +169,8 @@ Without any audio, `speaking` uses a built-in voice pattern so it still moves. D
 
 A glowing gradient ring (WebGL) whose outline breathes and wobbles with audio — the microphone, a TTS stream, or any level you supply.
 
+[Try it live →](https://thinkingorbs.netlify.app/components/voice-orb/)
+
 ```tsx
 const mic = useMicrophone();
 <VoiceOrb stream={mic.stream} />
@@ -188,6 +193,8 @@ Requires WebGL.
 
 Small dot-sphere indicators for what an agent is doing. Fifteen variants; change `variant` in place as the status changes.
 
+[Try it live →](https://thinkingorbs.netlify.app/components/status-orb/)
+
 `base` · `working` · `working · gyro` · `reasoning` · `reasoning · twins` · `searching` · `searching · lighthouse` · `background` · `background · spiral` · `retrying` · `retrying · surge` · `compacting` · `compacting · squeeze` · `compacting · fuse` · `waiting`
 
 ```tsx
@@ -207,6 +214,8 @@ All StatusOrbs on a page share one animation loop, and orbs scrolled out of view
 #### TokenOrb
 
 A tiny inline orb for chat replies. Every streamed chunk lights a few dots and adds energy, so its motion follows the **real** streaming speed — bursty streams look bursty, slow ones calm. It shimmers while waiting for the first token and settles green when done.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/token-orb/)
 
 ```tsx
 <TokenOrb tokens={tokenCount} done={!streaming} size={20} />
@@ -232,6 +241,8 @@ Ref: `push(count?: number)`.
 
 One coloured satellite per tool call around a dot-sphere core. Running tools orbit on their own tilted paths; a finished tool spirals in and docks with a flash in its colour; a failed one turns red and drifts away. Optional labelled chips underneath list each tool (and give screen readers the list).
 
+[Try it live →](https://thinkingorbs.netlify.app/components/tool-orb/)
+
 ```tsx
 <ToolOrb
   tools={[
@@ -252,6 +263,8 @@ Colours come from `TOOL_COLORS` in order of first appearance unless a tool sets 
 #### AskOrb
 
 The whole flow in one component: a prompt bar with a flowing gradient border → the bar folds into a sphere and flies up → a dot orb steps through **Thinking → Searching → Analyzing → Composing** → turns green → stretches into an answer card with a "New question" button.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/ask-orb/)
 
 ```tsx
 <AskOrb
@@ -282,6 +295,8 @@ The whole flow in one component: a prompt bar with a flowing gradient border →
 
 A glossy bubble character with glowing eyes: staggered blinks (left eye leads), a glance toward the pointer, and a springy jelly bounce when pressed.
 
+[Try it live →](https://thinkingorbs.netlify.app/components/mascot-orb/)
+
 ```tsx
 const mascot = useRef<MascotOrbRef>(null);
 <MascotOrb ref={mascot} size={240} color="#5f9ae6" />
@@ -301,6 +316,8 @@ Ref: `blink()`, `bounce(strength?: number)`.
 #### BotOrb
 
 A friendly robot that floats on a glowing pedestal and shows what the assistant is doing. Its dark visor carries the face: eyes that blink and glance toward the pointer while idle, pulsing ear lights and sound rings while listening, a spinning arc with sparks circling the head while thinking, a waveform while speaking, smiling eyes and a hop when an answer lands, and amber alert eyes with a short shake on error. It is SVG and CSS rather than a canvas, so it stays sharp at any size, down to a 56px face docked beside a message box.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/bot-orb/)
 
 ```tsx
 const bot = useRef<BotOrbRef>(null);
@@ -334,6 +351,8 @@ Ref: `bounce()`, `blink()`. The wrapper carries `data-bot` and `data-state`; a p
 
 A white ball whose eyes live on its surface and turn toward the pointer in 3D — sliding out to the rim and foreshortening when the pointer is far away — with occasional blinks.
 
+[Try it live →](https://thinkingorbs.netlify.app/components/gaze-orb/)
+
 ```tsx
 const orb = useRef<GazeOrbRef>(null);
 <GazeOrb ref={orb} size={220} />
@@ -356,6 +375,8 @@ Ref: `blink()`. It follows the pointer anywhere on the page (touch included) and
 #### SearchOrb
 
 For AI search. Radar pings pulse out while searching and each new source curves in from the edge into orbit; ranking pulls the best sources closer; synthesis absorbs them into the core, best first.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/search-orb/)
 
 | Phase | Colour | What it does |
 |---|---|---|
@@ -388,6 +409,8 @@ Sources are drawn as their `icon` (when given and loaded), else a letter badge f
 
 For uploads. A file card made of dots sits beside a teal sphere; as `progress` rises, dots peel off the card top-first and arc into the sphere. `reading` sweeps a scan band, `done` turns green, `error` turns the leftover card red and shakes it.
 
+[Try it live →](https://thinkingorbs.netlify.app/components/ingest-orb/)
+
 ```tsx
 <IngestOrb name="report.pdf" progress={0.42} status="uploading" />
 ```
@@ -406,6 +429,8 @@ The canvas is a `progressbar` (0–100) for assistive tech. `kindFromName(name)`
 #### ReasoningOrb
 
 For deep reasoning. Each step grows a node out from the centre, linked to the previous step and to its nearest earlier thought, building a slowly turning constellation. A pulse runs along the newest link, the active step glows, and an outer arc shows how much of the thinking budget is used (red above 85%). Turns green when finished.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/reasoning-orb/)
 
 ```tsx
 <ReasoningOrb
@@ -429,6 +454,8 @@ Passing a different list of steps (not an extension of the current one) starts a
 
 For image understanding. The picture is seen through a turning dot sphere — each dot takes the colour of the image behind it. `scanning` sweeps a scan line that reveals the colours; `done` keeps full colour and pulses labelled focus points (e.g. detected objects).
 
+[Try it live →](https://thinkingorbs.netlify.app/components/vision-orb/)
+
 ```tsx
 <VisionOrb
   src={URL.createObjectURL(file)}
@@ -450,6 +477,8 @@ The orb reads the image's pixels, so `src` must be `blob:`, `data:`, same-origin
 #### ReelOrb
 
 For video understanding. Thumbnail frames orbit a core on a tilted film-strip ring. The strip turns so the frame being analysed comes to the front, where it glows and beams into the core; watched frames keep a tint.
+
+[Try it live →](https://thinkingorbs.netlify.app/components/reel-orb/)
 
 ```tsx
 const frames = await captureFrames(videoFile, 12);
@@ -542,7 +571,7 @@ Engines: `createStatusOrb`, `createGazeOrb`, `createMascotOrb`, `createVoiceOrb`
 
 ## Demo & development
 
-The demo is a small site with three sections:
+The demo is a small site, live at **[thinkingorbs.netlify.app](https://thinkingorbs.netlify.app/)**, with three sections:
 
 <img src="docs/screenshots/components.png" alt="The Components page of the demo site, showing SearchOrb with its sidebar of every orb" width="100%">
 
